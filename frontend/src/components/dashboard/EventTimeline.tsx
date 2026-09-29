@@ -48,7 +48,7 @@ export function EventTimeline({ intersectionId }: Props) {
     <div className="card-interactive card p-4 relative overflow-hidden group">
       <div className="flex items-center justify-between mb-3">
         <div className="text-xs font-bold text-text-primary uppercase tracking-wide flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+          <span className="w-1.5 h-1.5 rounded-full bg-accent status-dot" />
           SYSTEM AUDIT & EVENT TIMELINE
         </div>
         <span className="text-[10px] text-text-muted font-mono">{events.length} logs</span>

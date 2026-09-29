@@ -52,31 +52,39 @@ class AmbulanceDetector:
         hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
         total_pixels = float(crop.shape[0] * crop.shape[1])
 
-        # 1. White bodywork (low saturation, high value)
-        white_mask = cv2.inRange(hsv, np.array([0, 0, 160], dtype=np.uint8), np.array([180, 50, 255], dtype=np.uint8))
-        white_ratio = float(np.count_nonzero(white_mask)) / total_pixels
+        # 1. White / Emergency Yellow bodywork (low saturation high value OR bright yellow)
+        white_mask = cv2.inRange(hsv, np.array([0, 0, 150], dtype=np.uint8), np.array([180, 55, 255], dtype=np.uint8))
+        yellow_mask = cv2.inRange(hsv, np.array([15, 60, 140], dtype=np.uint8), np.array([35, 255, 255], dtype=np.uint8))
+        body_mask = white_mask | yellow_mask
+        body_ratio = float(np.count_nonzero(body_mask)) / total_pixels
 
-        # 2. Red emergency markings (H near 0 or 170-180 with high saturation)
-        red_mask1 = cv2.inRange(hsv, np.array([0, 120, 100], dtype=np.uint8), np.array([10, 255, 255], dtype=np.uint8))
-        red_mask2 = cv2.inRange(hsv, np.array([170, 120, 100], dtype=np.uint8), np.array([180, 255, 255], dtype=np.uint8))
-        red_mask = red_mask1 | red_mask2
-        red_ratio = float(np.count_nonzero(red_mask)) / total_pixels
+        # 2. Emergency markings (Red stripes & Blue emergency livery)
+        red_mask1 = cv2.inRange(hsv, np.array([0, 110, 90], dtype=np.uint8), np.array([12, 255, 255], dtype=np.uint8))
+        red_mask2 = cv2.inRange(hsv, np.array([168, 110, 90], dtype=np.uint8), np.array([180, 255, 255], dtype=np.uint8))
+        blue_mask = cv2.inRange(hsv, np.array([95, 100, 90], dtype=np.uint8), np.array([135, 255, 255], dtype=np.uint8))
+        marking_mask = red_mask1 | red_mask2 | blue_mask
+        marking_ratio = float(np.count_nonzero(marking_mask)) / total_pixels
 
         # 3. Emergency roof light bar (top 25% of vehicle)
         roof_crop = hsv[: int(box_h * 0.25), :]
         if roof_crop.size > 0:
             roof_v = roof_crop[:, :, 2]
-            roof_peak_ratio = float(np.count_nonzero(roof_v > 230)) / float(roof_v.size)
+            roof_peak_ratio = float(np.count_nonzero(roof_v > 220)) / float(roof_v.size)
+            roof_red = (cv2.inRange(roof_crop, np.array([0, 100, 90], dtype=np.uint8), np.array([12, 255, 255], dtype=np.uint8)) |
+                        cv2.inRange(roof_crop, np.array([168, 100, 90], dtype=np.uint8), np.array([180, 255, 255], dtype=np.uint8)))
+            roof_blue = cv2.inRange(roof_crop, np.array([95, 100, 90], dtype=np.uint8), np.array([135, 255, 255], dtype=np.uint8))
+            roof_beacon_ratio = float(np.count_nonzero(roof_red | roof_blue)) / float(roof_crop.shape[0] * roof_crop.shape[1])
         else:
             roof_peak_ratio = 0.0
+            roof_beacon_ratio = 0.0
 
-        # Characteristic ambulance profile: predominantly white/yellow body with red accents & roof light cluster
+        # Characteristic ambulance profile: predominantly white/yellow body with emergency markings & roof beacon
         evidence_score = 0.0
-        if white_ratio > 0.35:
+        if body_ratio > 0.30:
             evidence_score += 0.35
-        if red_ratio > 0.05:
+        if marking_ratio > 0.035:
             evidence_score += 0.35
-        if roof_peak_ratio > 0.08:
+        if roof_peak_ratio > 0.08 or roof_beacon_ratio > 0.04:
             evidence_score += 0.25
 
         if evidence_score >= self.confidence_threshold:

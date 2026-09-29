@@ -173,7 +173,7 @@ export default function SimulationPage() {
                 value={sliders[key]}
                 disabled={!canControl}
                 onChange={(e) => setSliders((s) => ({ ...s, [key]: Number(e.target.value) }))}
-                className="flex-1 accent-blue-500"
+                className="flex-1 accent-accent cursor-pointer"
               />
               <span className="w-10 text-xs font-bold text-text-primary tabular-nums text-right">{sliders[key]}</span>
             </div>

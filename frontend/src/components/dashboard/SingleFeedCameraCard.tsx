@@ -209,7 +209,7 @@ export function SingleFeedCameraCard({ intersectionId, payload, wsStatus }: Prop
                 className={clsx(
                   "btn-tactile px-3 py-1 rounded-lg text-xs font-medium transition-all whitespace-nowrap",
                   isSelected
-                    ? "bg-accent text-white shadow-sm"
+                    ? "bg-accent/15 text-accent border border-accent/30 shadow-sm font-semibold"
                     : "text-text-muted hover:text-text-primary"
                 )}
               >
@@ -226,7 +226,7 @@ export function SingleFeedCameraCard({ intersectionId, payload, wsStatus }: Prop
             <span
               className={clsx(
                 "font-mono font-bold text-xs flex items-center gap-1",
-                pressure >= 75 ? "text-status-congested" : pressure >= 40 ? "text-amber-400" : "text-emerald-400"
+                pressure >= 75 ? "text-status-congested" : pressure >= 40 ? "text-status-moderate" : "text-status-free"
               )}
             >
               <AnimatedNumber value={pressure} decimals={1} suffix="%" />
@@ -238,7 +238,7 @@ export function SingleFeedCameraCard({ intersectionId, payload, wsStatus }: Prop
       {/* Single Live Video Camera Viewport */}
       <div
         ref={containerRef}
-        className="relative bg-black rounded-2xl overflow-hidden aspect-[16/9] flex items-center justify-center shadow-inner group/video border border-surface-border select-none"
+        className="relative bg-background-secondary rounded-2xl overflow-hidden aspect-[16/9] flex items-center justify-center shadow-inner group/video border border-surface-border hover:border-accent/25 transition-colors duration-300 select-none"
       >
         {frameOk ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -263,23 +263,22 @@ export function SingleFeedCameraCard({ intersectionId, payload, wsStatus }: Prop
         <div className="absolute inset-0 cctv-scanlines opacity-40 pointer-events-none" />
 
         {/* Holographic HUD Reticle Corners */}
-        <div className="absolute top-2.5 left-2.5 text-xs font-mono text-cyan-400/70 select-none pointer-events-none">┌</div>
-        <div className="absolute top-2.5 right-2.5 text-xs font-mono text-cyan-400/70 select-none pointer-events-none">┐</div>
-        <div className="absolute bottom-2.5 left-2.5 text-xs font-mono text-cyan-400/70 select-none pointer-events-none">└</div>
-        <div className="absolute bottom-2.5 right-2.5 text-xs font-mono text-cyan-400/70 select-none pointer-events-none">┘</div>
+        <div className="absolute top-2.5 left-2.5 text-xs font-mono text-accent/35 select-none pointer-events-none">┌</div>
+        <div className="absolute top-2.5 right-2.5 text-xs font-mono text-accent/35 select-none pointer-events-none">┐</div>
+        <div className="absolute bottom-2.5 left-2.5 text-xs font-mono text-accent/35 select-none pointer-events-none">└</div>
+        <div className="absolute bottom-2.5 right-2.5 text-xs font-mono text-accent/35 select-none pointer-events-none">┘</div>
 
         {/* Live Telemetry Pill with Jumping Stream Visualizer */}
-        <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/80 backdrop-blur-md text-[10px] text-white font-mono flex items-center gap-1.5 border border-white/10 shadow-lg">
+        <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-surface/90 backdrop-blur-md text-[10px] text-text-primary font-mono flex items-center gap-1.5 border border-surface-border shadow-lg">
           <div className="relative flex items-center justify-center w-2 h-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-status-online" />
-            <span className="absolute inset-0 rounded-full bg-status-online animate-ping opacity-75" />
+            <span className="w-1.5 h-1.5 rounded-full bg-status-online status-dot" />
           </div>
           <span>LIVE • {latencyMs != null ? `${latencyMs}ms` : "38ms"}</span>
           <div className="flex items-end gap-0.5 h-3 ml-1.5">
-            <span className="w-0.5 bg-cyan-400 eq-bar-1 rounded-full" />
-            <span className="w-0.5 bg-cyan-400 eq-bar-2 rounded-full" />
-            <span className="w-0.5 bg-cyan-400 eq-bar-3 rounded-full" />
-            <span className="w-0.5 bg-cyan-400 eq-bar-4 rounded-full" />
+            <span className="w-0.5 bg-accent/70 eq-bar-1 rounded-full" />
+            <span className="w-0.5 bg-accent/70 eq-bar-2 rounded-full" />
+            <span className="w-0.5 bg-accent/70 eq-bar-3 rounded-full" />
+            <span className="w-0.5 bg-accent/70 eq-bar-4 rounded-full" />
           </div>
         </div>
 

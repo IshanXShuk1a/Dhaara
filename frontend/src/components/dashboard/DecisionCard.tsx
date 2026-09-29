@@ -19,7 +19,7 @@ export function DecisionCard({ payload }: Props) {
       <div>
         <div className="flex items-center justify-between mb-3">
           <div className="text-xs font-bold text-text-primary uppercase tracking-wide flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-accent status-dot" />
             {decision ? `AI REASONING • ${decision.selected_direction}` : "DECISION ENGINE"}
           </div>
           <button className="text-text-muted hover:text-text-primary text-xs btn-tactile p-1">•••</button>

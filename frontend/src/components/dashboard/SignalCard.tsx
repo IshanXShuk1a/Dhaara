@@ -5,9 +5,9 @@ import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 const DIRECTIONS = ["NORTH", "SOUTH", "EAST", "WEST"];
 
 const COLOR_TEXT: Record<string, string> = {
-  GREEN: "text-emerald-400 font-extrabold",
-  YELLOW: "text-amber-400 font-extrabold",
-  ALL_RED: "text-rose-400 font-extrabold",
+  GREEN: "text-status-free font-bold",
+  YELLOW: "text-status-moderate font-bold",
+  ALL_RED: "text-status-congested font-bold",
 };
 
 interface Props {
@@ -25,10 +25,10 @@ export function SignalCard({ payload }: Props) {
     <div className="card-interactive card p-4 relative overflow-hidden group">
       <div className="flex items-center justify-between mb-3">
         <div className="text-xs font-bold text-text-primary uppercase tracking-wide flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="w-1.5 h-1.5 rounded-full bg-status-free status-dot" />
           SIGNAL HARDWARE CONTROLLER
         </div>
-        <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-surface-card border border-surface-border text-text-secondary shadow-sm">
+        <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-surface-elevated border border-surface-border text-text-secondary shadow-sm">
           {mode}
         </span>
       </div>
@@ -62,26 +62,26 @@ export function SignalCard({ payload }: Props) {
         {DIRECTIONS.map((direction) => {
           const isActive = direction === activeDirection;
           const isTarget = direction === targetDirection;
-          let dotClass = "bg-red-500/70 shadow-[0_0_8px_rgba(239,68,68,0.4)]";
-          let borderClass = "border-surface-border bg-surface-card";
+          let dotClass = "bg-status-congested/60 shadow-[0_0_6px_rgba(239,98,98,0.35)]";
+          let borderClass = "border-surface-border bg-surface";
           let labelBadge = "RED";
 
           if (isActive) {
             if (color === "GREEN") {
-              dotClass = "bg-emerald-400 shadow-[0_0_18px_rgba(16,185,129,0.9)]";
-              borderClass = "border-emerald-500/70 bg-emerald-500/10 ring-1 ring-emerald-500/40 shadow-lg shadow-emerald-500/10";
+              dotClass = "bg-status-free shadow-[0_0_12px_rgba(66,211,146,0.6)]";
+              borderClass = "border-status-free/40 bg-status-free/10 ring-1 ring-status-free/20";
               labelBadge = "GREEN";
             } else if (color === "YELLOW") {
-              dotClass = "bg-amber-400 shadow-[0_0_18px_rgba(245,158,11,0.9)] animate-pulse";
-              borderClass = "border-amber-400/70 bg-amber-400/10 ring-1 ring-amber-400/40 shadow-lg shadow-amber-400/10";
+              dotClass = "bg-status-moderate shadow-[0_0_12px_rgba(232,184,74,0.6)]";
+              borderClass = "border-status-moderate/40 bg-status-moderate/10 ring-1 ring-status-moderate/20";
               labelBadge = "YELLOW";
             } else {
-              dotClass = "bg-red-500 shadow-[0_0_18px_rgba(239,68,68,0.9)]";
-              borderClass = "border-red-500/70 bg-red-500/10";
+              dotClass = "bg-status-congested shadow-[0_0_10px_rgba(239,98,98,0.5)]";
+              borderClass = "border-status-congested/40 bg-status-congested/10";
               labelBadge = "ALL RED";
             }
           } else if (isTarget) {
-            borderClass = "border-accent/50 bg-accent/10";
+            borderClass = "border-accent/30 bg-accent/[0.06]";
             labelBadge = "NEXT";
           }
 
@@ -90,10 +90,10 @@ export function SignalCard({ payload }: Props) {
               <div className="relative flex items-center justify-center mx-auto mb-1.5 w-4 h-4">
                 <div className={clsx("h-3 w-3 rounded-full transition-all duration-300", dotClass)} />
                 {isActive && color === "GREEN" && (
-                  <span className="beacon-ring border border-emerald-400" />
+                  <span className="beacon-ring border border-status-free/40" />
                 )}
                 {isActive && color === "YELLOW" && (
-                  <span className="beacon-ring border border-amber-400" />
+                  <span className="beacon-ring border border-status-moderate/40" />
                 )}
               </div>
               <div className="text-[11px] font-bold text-text-primary">{direction}</div>

@@ -70,7 +70,7 @@ export default function AnalyticsPage() {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([timestamp, lanes]) => ({ timestamp: new Date(timestamp).toLocaleTimeString(), ...lanes }));
   const laneKeys: string[] = Array.from(new Set(data.volume.map((r: { lane_id: string }) => r.lane_id)));
-  const laneColors: Record<string, string> = { NORTH: "#3b82f6", SOUTH: "#ef4444", EAST: "#22c55e", WEST: "#eab308" };
+  const laneColors: Record<string, string> = { NORTH: "#5EA7FF", SOUTH: "#EF6262", EAST: "#42D392", WEST: "#E8B84A" };
 
   return (
     <div className="space-y-6">
@@ -81,13 +81,13 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Time-range filter */}
-        <div className="flex items-center gap-1.5 p-1 rounded-lg bg-surface-card border border-surface-border text-xs">
+        <div className="flex items-center gap-1.5 p-1 rounded-lg bg-surface border border-surface-border text-xs">
           {["1h", "6h", "24h", "all"].map((tr) => (
             <button
               key={tr}
               onClick={() => setTimeRange(tr)}
               className={`px-2.5 py-1 rounded font-medium transition-colors ${
-                timeRange === tr ? "bg-accent text-white" : "text-text-secondary hover:text-text-primary"
+                timeRange === tr ? "bg-accent/15 text-accent border border-accent/30 shadow-sm" : "text-text-secondary hover:text-text-primary"
               }`}
             >
               {tr.toUpperCase()}
@@ -131,10 +131,10 @@ export default function AnalyticsPage() {
               <LineChart data={volumeSeries}>
                 <XAxis dataKey="timestamp" stroke="#6b7280" fontSize={11} />
                 <YAxis stroke="#6b7280" fontSize={11} />
-                <Tooltip contentStyle={{ background: "#15181d", border: "1px solid #23262c", fontSize: 12 }} />
+                <Tooltip contentStyle={{ background: "#0D1517", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: 8, fontSize: 11 }} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {laneKeys.map((lane) => (
-                  <Line key={lane} type="monotone" dataKey={lane} stroke={laneColors[lane] ?? "#9aa1ac"} dot={false} strokeWidth={2} />
+                  <Line key={lane} type="monotone" dataKey={lane} stroke={laneColors[lane] ?? "#8E9BA4"} dot={false} strokeWidth={2} animationDuration={800} />
                 ))}
               </LineChart>
             </ResponsiveContainer>
@@ -147,8 +147,8 @@ export default function AnalyticsPage() {
             <BarChart data={pressureData}>
               <XAxis dataKey="lane" stroke="#6b7280" fontSize={11} />
               <YAxis domain={[0, 100]} stroke="#6b7280" fontSize={11} />
-              <Tooltip contentStyle={{ background: "#15181d", border: "1px solid #23262c", fontSize: 12 }} />
-              <Bar dataKey="pressure" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              <Tooltip contentStyle={{ background: "#0D1517", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: 8, fontSize: 11 }} />
+              <Bar dataKey="pressure" fill="#37D6B0" radius={[4, 4, 0, 0]} animationDuration={800} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -164,8 +164,8 @@ export default function AnalyticsPage() {
               <BarChart data={distributionData} layout="vertical">
                 <XAxis type="number" stroke="#6b7280" fontSize={11} />
                 <YAxis type="category" dataKey="lane" stroke="#6b7280" fontSize={11} width={70} />
-                <Tooltip contentStyle={{ background: "#15181d", border: "1px solid #23262c", fontSize: 12 }} />
-                <Bar dataKey="count" fill="#10b981" radius={[0, 4, 4, 0]} />
+                <Tooltip contentStyle={{ background: "#0D1517", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: 8, fontSize: 11 }} />
+                <Bar dataKey="count" fill="#42D392" radius={[0, 4, 4, 0]} animationDuration={800} />
               </BarChart>
             </ResponsiveContainer>
           )}

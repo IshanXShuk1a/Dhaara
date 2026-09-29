@@ -115,11 +115,11 @@ export function Sidebar() {
                 className={clsx(
                   "btn-tactile flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200",
                   isActive
-                    ? "dark:bg-white dark:text-gray-950 bg-slate-900 text-white shadow-md transform scale-[1.02]"
-                    : "text-text-secondary hover:text-text-primary hover:bg-surface-cardHover hover:translate-x-1"
+                    ? "bg-accent/[0.08] text-text-primary border border-accent/25 shadow-[0_0_12px_rgba(55,214,176,0.12)] relative before:absolute before:left-1.5 before:top-2.5 before:bottom-2.5 before:w-1 before:rounded-full before:bg-accent before:shadow-[0_0_6px_rgba(55,214,176,0.6)]"
+                    : "text-text-secondary hover:text-text-primary hover:bg-surface-elevated/60 hover:translate-x-0.5 border border-transparent"
                 )}
               >
-                <span className={clsx(isActive ? "dark:text-gray-950 text-white" : "text-text-muted")}>{item.icon}</span>
+                <span className={clsx(isActive ? "text-accent" : "text-text-muted")}>{item.icon}</span>
                 <span>{item.label}</span>
               </Link>
             );
@@ -131,7 +131,7 @@ export function Sidebar() {
           <div className="flex items-center justify-between text-[11px] font-semibold text-text-muted uppercase tracking-wider px-1">
             <span>Live Nodes</span>
             <span className="text-[10px] font-mono text-accent flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-accent status-dot" />
               {intersections.length} Active
             </span>
           </div>
@@ -156,8 +156,7 @@ export function Sidebar() {
                     <div className="text-[10px] text-text-muted truncate">{node.location}</div>
                   </div>
                   <div className="relative flex items-center justify-center w-2 h-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-status-online" />
-                    <span className="absolute inset-0 rounded-full bg-status-online animate-ping opacity-75" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-status-online status-dot" />
                   </div>
                 </button>
               );

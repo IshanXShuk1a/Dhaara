@@ -30,11 +30,59 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <IntersectionProvider>
       <div className="min-h-screen p-2 sm:p-6 flex flex-col justify-center relative overflow-hidden transition-colors duration-400">
-        {/* Floating Ambient Atmosphere Orbs */}
+        {/* Ambient Atmosphere: Layered Slow Drift Fields & Subtle City Traffic Network */}
         <div aria-hidden="true" className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-          <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-indigo-300/40 dark:bg-purple-600/20 blur-[130px] animate-float-slow transition-colors duration-700" />
-          <div className="absolute top-[25%] right-[-5%] w-[450px] h-[450px] rounded-full bg-sky-300/45 dark:bg-cyan-500/15 blur-[140px] animate-float-slow-reverse transition-colors duration-700" />
-          <div className="absolute bottom-[-10%] left-[35%] w-[550px] h-[550px] rounded-full bg-amber-200/35 dark:bg-emerald-500/15 blur-[150px] animate-float-slow transition-colors duration-700" />
+          {/* Extremely slow ambient light fields (28s, 36s, 32s ease-in-out) */}
+          <div className="absolute top-[-15%] left-[-10%] w-[720px] h-[720px] rounded-full bg-[#37D6B0]/[0.035] blur-[160px] animate-ambient-1" />
+          <div className="absolute top-[25%] right-[-8%] w-[680px] h-[680px] rounded-full bg-[#5EA7FF]/[0.028] blur-[170px] animate-ambient-2" />
+          <div className="absolute bottom-[-15%] left-[28%] w-[760px] h-[760px] rounded-full bg-[#42D392]/[0.022] blur-[180px] animate-ambient-3" />
+
+          {/* Subtle City Traffic Network Corridors & Sparse Deterministic Flow Particles */}
+          <svg
+            className="absolute inset-0 w-full h-full opacity-60 dark:opacity-35 pointer-events-none select-none"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 1440 900"
+            preserveAspectRatio="none"
+          >
+            {/* Arterial Corridor Lines */}
+            <path
+              d="M 120 220 L 720 220 L 720 540 L 1320 540"
+              fill="none"
+              stroke="rgba(55,214,176,0.035)"
+              strokeWidth="1"
+            />
+            <path
+              d="M 280 680 L 280 340 L 980 340 L 980 180"
+              fill="none"
+              stroke="rgba(94,167,255,0.03)"
+              strokeWidth="1"
+            />
+            {/* Intersection Nodes */}
+            <circle cx="120" cy="220" r="2" fill="rgba(55,214,176,0.15)" />
+            <circle cx="720" cy="220" r="2.5" fill="rgba(55,214,176,0.2)" />
+            <circle cx="720" cy="540" r="2.5" fill="rgba(55,214,176,0.2)" />
+            <circle cx="1320" cy="540" r="2" fill="rgba(55,214,176,0.15)" />
+            <circle cx="280" cy="680" r="2" fill="rgba(94,167,255,0.15)" />
+            <circle cx="280" cy="340" r="2.5" fill="rgba(94,167,255,0.2)" />
+            <circle cx="980" cy="340" r="2.5" fill="rgba(94,167,255,0.2)" />
+            <circle cx="980" cy="180" r="2" fill="rgba(94,167,255,0.15)" />
+
+            {/* Sparse, slow traffic pulse particles (26s & 32s deterministic paths) */}
+            <circle r="1.75" fill="#37D6B0" opacity="0.45">
+              <animateMotion
+                path="M 120 220 L 720 220 L 720 540 L 1320 540"
+                dur="26s"
+                repeatCount="indefinite"
+              />
+            </circle>
+            <circle r="1.5" fill="#5EA7FF" opacity="0.4">
+              <animateMotion
+                path="M 280 680 L 280 340 L 980 340 L 980 180"
+                dur="32s"
+                repeatCount="indefinite"
+              />
+            </circle>
+          </svg>
         </div>
 
         <div className="dashboard-cockpit overflow-hidden flex min-h-[94vh] relative z-10 backdrop-blur-[2px]">

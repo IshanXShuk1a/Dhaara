@@ -319,8 +319,8 @@ export default function TrafficClassifierPage() {
             className={clsx(
               "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
               activeMode === "quad"
-                ? "bg-accent text-slate-900 shadow-md shadow-accent/25"
-                : "text-text-muted hover:text-text-primary"
+                ? "bg-accent/15 text-accent border border-accent/30 shadow-sm"
+                : "text-text-muted hover:text-text-primary border border-transparent"
             )}
           >
             <span>🔲</span>
@@ -331,8 +331,8 @@ export default function TrafficClassifierPage() {
             className={clsx(
               "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
               activeMode === "single"
-                ? "bg-accent text-slate-900 shadow-md shadow-accent/25"
-                : "text-text-muted hover:text-text-primary"
+                ? "bg-accent/15 text-accent border border-accent/30 shadow-sm"
+                : "text-text-muted hover:text-text-primary border border-transparent"
             )}
           >
             <span>📹</span>

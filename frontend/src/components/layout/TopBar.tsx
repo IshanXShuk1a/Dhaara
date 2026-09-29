@@ -64,7 +64,7 @@ export function TopBar() {
         </div>
 
         {payload?.emergency && payload.emergency.state !== "NONE" && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-rose-500/15 text-rose-500 border border-rose-500/30 animate-pulse">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-status-emergency/15 text-status-emergency border border-status-emergency/30">
             <span>PRIORITY ACTIVE</span>
           </div>
         )}
@@ -80,9 +80,8 @@ export function TopBar() {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
           </svg>
-          <span className="relative flex items-center justify-center absolute top-1.5 right-1.5 w-2 h-2">
-            <span className="w-2 h-2 rounded-full bg-rose-500 ring-2 ring-surface-panel" />
-            <span className="absolute inset-0 rounded-full bg-rose-500 animate-ping opacity-75" />
+          <span className="absolute top-1.5 right-1.5 w-2 h-2">
+            <span className="w-2 h-2 rounded-full bg-status-emergency status-dot ring-2 ring-surface-panel" />
           </span>
         </button>
 
@@ -110,7 +109,7 @@ export function TopBar() {
 
         {/* Operator Profile Pill matching mockup avatar and name */}
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-rose-500 to-purple-600 p-[1.5px] shadow-sm">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-accent to-status-info p-[1.5px] shadow-sm">
             <div className="w-full h-full rounded-[10px] bg-surface-card flex items-center justify-center text-xs font-bold text-text-primary">
               {username ? username.charAt(0).toUpperCase() : "A"}
             </div>

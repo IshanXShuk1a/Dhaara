@@ -139,6 +139,23 @@ class TrafficImageClassifier:
         # Run full analysis on best representative frame
         res = self._classify_cv_frame(best_frame, filename, start_time, precomputed_detections=max_detections)
 
+        # Dynamically compute per-approach vehicle counts and queue estimations from actual frame detections
+        cx, cy = width / 2.0, height / 2.0
+        approach_veh_counts = {"NORTH": 0, "SOUTH": 0, "EAST": 0, "WEST": 0}
+        for d in max_detections:
+            bx1, by1, bx2, by2 = d["bbox"]
+            bx_center = (bx1 + bx2) / 2.0
+            by_center = (by1 + by2) / 2.0
+            dx = bx_center - cx
+            dy = by_center - cy
+
+            if abs(dx) > abs(dy):
+                direction = "EAST" if dx > 0 else "WEST"
+            else:
+                direction = "SOUTH" if dy > 0 else "NORTH"
+
+            approach_veh_counts[direction] += 1
+
         # Enhance summary with multi-approach video analysis
         res["video_metadata"] = {
             "duration_s": round(duration_s, 2),
@@ -147,33 +164,30 @@ class TrafficImageClassifier:
             "width": width,
             "height": height,
             "sampled_frames": len(sample_indices),
-            "approach_queues": {
-                "WEST": max(8, approach_queues["WEST"] // len(sample_indices) + 4),
-                "EAST": max(4, approach_queues["EAST"] // len(sample_indices) + 2),
-                "NORTH": max(3, approach_queues["NORTH"] // len(sample_indices) + 1),
-                "SOUTH": max(4, approach_queues["SOUTH"] // len(sample_indices) + 2),
-            },
+            "approach_queues": approach_veh_counts,
         }
 
-        # Override with rich overhead intersection context if 123.mp4
-        if "123" in filename:
-            res["classification"]["code"] = "HEAVY"
-            res["classification"]["label"] = "Heavy Traffic (West Corridor Queue)"
-            res["classification"]["severity"] = "HIGH"
-            res["classification"]["badge_color"] = "orange"
-            res["classification"]["density_percentage"] = 68.5
-            res["classification"]["recommended_green_s"] = 42
-            res["classification"]["ai_reasoning"] = (
-                "Video analysis of 123.mp4 confirms multi-lane intersection with heavy queue accumulation on the Westbound approach "
-                "(8-11 vehicles stopped at the crosswalk stop line). North-South movements are actively transitioning. "
-                "Recommendation: Grant 42s Green to West approach to dissolve the standing queue before cycle reset."
-            )
-            res["classification"]["approach_breakdown"] = {
-                "WEST": {"queue_length_m": 48, "status": "CONGESTED", "vehicles": 10},
-                "EAST": {"queue_length_m": 24, "status": "MODERATE", "vehicles": 5},
-                "SOUTH": {"queue_length_m": 18, "status": "MODERATE", "vehicles": 4},
-                "NORTH": {"queue_length_m": 12, "status": "FREE", "vehicles": 3},
+        # Calculate approach breakdown and intelligent queue management
+        res["classification"]["approach_breakdown"] = {
+            d: {
+                "queue_length_m": approach_veh_counts[d] * 6,
+                "status": "CONGESTED" if approach_veh_counts[d] >= 7 else ("HEAVY" if approach_veh_counts[d] >= 4 else ("MODERATE" if approach_veh_counts[d] >= 2 else "FREE")),
+                "vehicles": approach_veh_counts[d],
             }
+            for d in ("WEST", "EAST", "SOUTH", "NORTH")
+        }
+
+        dominant_dir = max(approach_veh_counts, key=approach_veh_counts.get)
+        dominant_cnt = approach_veh_counts[dominant_dir]
+        if dominant_cnt > 0:
+            rec_green = max(20, min(65, int(15 + dominant_cnt * 3.5)))
+            res["classification"]["recommended_green_s"] = rec_green
+            res["classification"]["ai_reasoning"] = (
+                f"Multi-approach analysis confirms high-volume intersection flow with highest vehicle queue on the {dominant_dir} corridor "
+                f"({dominant_cnt} vehicles queued). Total intersection load: {res['classification']['total_vehicles']} vehicles, "
+                f"{res['classification']['density_percentage']}% PCU density. "
+                f"Recommendation: Grant {rec_green}s green split to the {dominant_dir} corridor to flush the standing queue before cycle rollover."
+            )
 
         return res
 
@@ -254,8 +268,19 @@ class TrafficImageClassifier:
 
         total_img_area = float(img_w * img_h)
         area_occupancy = (total_bbox_area / total_img_area) if total_img_area > 0 else 0
-        raw_density = (area_occupancy * 140.0) + (total_vehicles * 4.8) + (vehicle_counts["bus"] * 7.0) + (vehicle_counts["truck"] * 7.0)
-        density_percentage = min(100.0, max(5.0, round(raw_density, 1)))
+
+        # Standard Passenger Car Unit (PCU) calculation (Highway Capacity Manual standard)
+        pcu_total = (
+            vehicle_counts["car"] * 1.0
+            + vehicle_counts["motorcycle"] * 0.4
+            + vehicle_counts["bus"] * 2.5
+            + vehicle_counts["truck"] * 2.2
+            + vehicle_counts["ambulance"] * 1.5
+        )
+        pcu_saturation = min(1.0, pcu_total / 14.0)
+        occupancy_factor = min(1.0, area_occupancy * 12.0)
+        raw_density = (pcu_saturation * 65.0) + (occupancy_factor * 35.0)
+        density_percentage = min(100.0, max(4.0, round(raw_density, 1)))
 
         if emergency_detected:
             code = "EMERGENCY_PRIORITY"
@@ -342,8 +367,10 @@ class TrafficImageClassifier:
 
         if self._yolo_model is not None:
             try:
-                # Use conf=0.22 to catch overhead aerial drone vehicles
-                results = self._yolo_model.predict(img, conf=0.22, verbose=False)
+                # High-resolution inference preserving small drone and aerial vehicles (up to 1280px)
+                max_dim = max(img.shape[:2])
+                img_size = min(1280, max(640, (max_dim // 32) * 32))
+                results = self._yolo_model.predict(img, conf=0.18, iou=0.40, imgsz=img_size, verbose=False)
                 for r in results:
                     names = r.names
                     for box in r.boxes:
@@ -359,6 +386,14 @@ class TrafficImageClassifier:
 
                         x1, y1, x2, y2 = [float(v) for v in box.xyxy[0]]
                         conf = float(box.conf[0])
+
+                        # High-confidence ambulance verification
+                        if cls_name in ("bus", "truck", "car"):
+                            is_amb, amb_conf = self._ambulance_detector.is_ambulance(img, (x1, y1, x2, y2), cls_name)
+                            if is_amb:
+                                cls_name = "ambulance"
+                                conf = max(conf, amb_conf)
+
                         detections.append({
                             "class": cls_name,
                             "confidence": conf,
@@ -372,21 +407,52 @@ class TrafficImageClassifier:
         return self._heuristic_vehicle_detector(img)
 
     def _heuristic_vehicle_detector(self, img: np.ndarray) -> list[dict[str, Any]]:
-        """Detector tuned for both aerial drone view (small vehicles) and street view."""
+        """High-Precision Computer Vision Vehicle Detector (CLAHE + TopHat/BlackHat + Sobel Fusion + Texture Verification + NMS)."""
         h, w = img.shape[:2]
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        blur = cv2.GaussianBlur(gray, (5, 5), 0)
-        edges = cv2.Canny(blur, 30, 110)
 
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 7))
-        closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+        # 1. CLAHE Local Contrast Enhancement (reveals shadowy and low-contrast vehicles)
+        clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+        enhanced_gray = clahe.apply(gray)
+
+        # 2. Dual Multi-Scale Morphological TopHat (bright cars on dark road) & BlackHat (dark vehicles on light road)
+        k_small = max(5, int(min(w, h) * 0.020))
+        if k_small % 2 == 0:
+            k_small += 1
+        k_large = max(9, int(min(w, h) * 0.038))
+        if k_large % 2 == 0:
+            k_large += 1
+
+        kernel_s = cv2.getStructuringElement(cv2.MORPH_RECT, (k_small, k_small))
+        kernel_l = cv2.getStructuringElement(cv2.MORPH_RECT, (k_large, k_large))
+
+        tophat = cv2.morphologyEx(enhanced_gray, cv2.MORPH_TOPHAT, kernel_s)
+        blackhat = cv2.morphologyEx(enhanced_gray, cv2.MORPH_BLACKHAT, kernel_l)
+        morph_combined = cv2.addWeighted(tophat, 0.65, blackhat, 0.65, 0)
+
+        # 3. Gradient Edge Fusion: preserve sharp vehicle chassis and windshields
+        grad_x = cv2.Sobel(enhanced_gray, cv2.CV_16S, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(enhanced_gray, cv2.CV_16S, 0, 1, ksize=3)
+        abs_grad = cv2.convertScaleAbs(cv2.addWeighted(cv2.convertScaleAbs(grad_x), 0.5, cv2.convertScaleAbs(grad_y), 0.5, 0))
+
+        fused = cv2.addWeighted(morph_combined, 0.60, abs_grad, 0.40, 0)
+        blur = cv2.GaussianBlur(fused, (5, 5), 0)
+
+        # 4. Otsu Adaptive Thresholding
+        _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        # Close gaps between roof, windshield, and bonnet
+        close_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+        closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, close_kernel)
 
         contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        detections: list[dict[str, Any]] = []
-        # Support small aerial vehicles (down to 0.02% image area)
-        min_area = (w * h) * 0.0002
-        max_area = (w * h) * 0.20
+        raw_candidates: list[dict[str, Any]] = []
+        min_area = (w * h) * 0.00015
+        max_area = (w * h) * 0.085
+
+        ref_car_area = (w * h) * 0.0016
+        cx, cy = w / 2.0, h / 2.0
 
         for c in contours:
             area = cv2.contourArea(c)
@@ -396,29 +462,82 @@ class TrafficImageClassifier:
             x, y, bw, bh = cv2.boundingRect(c)
             aspect_ratio = float(bw) / float(bh)
 
-            if aspect_ratio < 0.3 or aspect_ratio > 4.8:
+            # Strict aspect ratio boundaries (filters out thin lane lines, lane dividers)
+            if aspect_ratio < 0.20 or aspect_ratio > 5.0:
                 continue
 
-            if (bw > w * 0.10 and aspect_ratio > 1.6) or (bh > h * 0.12 and aspect_ratio < 0.6):
-                cls_name = "bus"
-                conf = 0.88
-            elif bw < w * 0.035 and bh < h * 0.045:
+            # Central intersection crossing pavement filter
+            if abs(x + bw / 2.0 - cx) < w * 0.055 and abs(y + bh / 2.0 - cy) < h * 0.055:
+                continue
+
+            # 5. Internal Texture & Feature Verification
+            # Real vehicles have high internal gradient/texture variance (windows, roof, shadow)
+            # whereas painted road stripes and uniform asphalt have low variance (< 14)
+            crop = gray[y:y + bh, x:x + bw]
+            if crop.size == 0 or crop.std() < 15.0:
+                continue
+
+            # Vehicle classification based on area scale and aspect ratio
+            box_area = bw * bh
+            if box_area > ref_car_area * 2.2 and (aspect_ratio > 1.6 or aspect_ratio < 0.6):
+                cls_name = "bus" if (aspect_ratio > 2.2 or aspect_ratio < 0.45) else "truck"
+                conf = 0.90
+            elif box_area < ref_car_area * 0.45:
                 cls_name = "motorcycle"
-                conf = 0.84
-            elif bw > w * 0.06 or bh > h * 0.08:
+                conf = 0.85
+            elif box_area > ref_car_area * 1.5:
                 cls_name = "truck"
-                conf = 0.86
+                conf = 0.88
             else:
                 cls_name = "car"
-                conf = 0.91
+                conf = 0.92
 
-            detections.append({
+            # Check ambulance status
+            is_amb, amb_conf = self._ambulance_detector.is_ambulance(img, (float(x), float(y), float(x + bw), float(y + bh)), cls_name)
+            if is_amb:
+                cls_name = "ambulance"
+                conf = amb_conf
+
+            raw_candidates.append({
                 "class": cls_name,
                 "confidence": conf,
                 "bbox": (float(x), float(y), float(x + bw), float(y + bh)),
             })
 
-        return detections
+        # 6. Non-Maximum Suppression (NMS) to eliminate duplicate overlapping boxes
+        return self._apply_nms_dicts(raw_candidates, iou_thresh=0.35)
+
+    @staticmethod
+    def _apply_nms_dicts(detections: list[dict[str, Any]], iou_thresh: float = 0.35) -> list[dict[str, Any]]:
+        if not detections:
+            return []
+
+        def _box_iou(a, b):
+            ax1, ay1, ax2, ay2 = a
+            bx1, by1, bx2, by2 = b
+            ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+            ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+            iw, ih = max(0.0, ix2 - ix1), max(0.0, iy2 - iy1)
+            iarea = iw * ih
+            area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+            area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+            union = area_a + area_b - iarea
+            return iarea / union if union > 0 else 0.0
+
+        detections.sort(
+            key=lambda d: d["confidence"] * (d["bbox"][2] - d["bbox"][0]) * (d["bbox"][3] - d["bbox"][1]),
+            reverse=True,
+        )
+        kept: list[dict[str, Any]] = []
+        for det in detections:
+            overlap = False
+            for k in kept:
+                if _box_iou(det["bbox"], k["bbox"]) > iou_thresh:
+                    overlap = True
+                    break
+            if not overlap:
+                kept.append(det)
+        return kept
 
     def _check_helmet(self, img: np.ndarray, bbox: tuple[float, float, float, float]) -> bool:
         """Inspect upper head area of a motorcycle rider for helmet."""

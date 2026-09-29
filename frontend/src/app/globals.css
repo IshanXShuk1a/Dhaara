@@ -4,89 +4,173 @@
 
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 
+/* ========================================================================= */
+/* 1. COLOR FOUNDATION & DESIGN TOKENS (Command Center Palette)              */
+/* ========================================================================= */
+
 :root,
 html.dark {
   color-scheme: dark;
-  --color-canvas-solid: #090a0f;
-  --color-canvas-solid-rgb: 9 10 15;
-  --color-canvas-bg: radial-gradient(135% 100% at 50% 0%, #1c202d 0%, #10131b 45%, #08090d 100%);
-  
-  --color-cockpit-bg: #11141c;
-  --color-cockpit-bg-rgb: 17 20 28;
-  --color-cockpit-border: rgba(255, 255, 255, 0.08);
-  --color-cockpit-shadow: 0 32px 80px -16px rgba(0, 0, 0, 0.85), inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
 
-  --color-card-bg: #161922;
-  --color-card-bg-rgb: 22 25 34;
-  --color-card-hover: #1f2432;
-  --color-card-hover-rgb: 31 36 50;
-  --color-card-border: rgba(255, 255, 255, 0.08);
+  /* Base Command Center Foundation */
+  --background: #070B0D;
+  --background-rgb: 7 11 13;
+  --background-secondary: #0A1012;
+  --background-secondary-rgb: 10 16 18;
 
-  --color-pill-bg: #1e2330;
-  --color-pill-bg-rgb: 30 35 48;
-  --color-pill-border: rgba(255, 255, 255, 0.08);
+  --surface: #0D1517;
+  --surface-rgb: 13 21 23;
+  --surface-elevated: #111B1D;
+  --surface-elevated-rgb: 17 27 29;
 
-  --color-text-primary: #f8fafc;
-  --color-text-primary-rgb: 248 250 252;
-  --color-text-secondary: #94a3b8;
-  --color-text-secondary-rgb: 148 163 184;
-  --color-text-muted: #64748b;
-  --color-text-muted-rgb: 100 116 139;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-rgb: 255 255 255;
 
-  --color-surface-raised: #13161f;
-  --color-surface-raised-rgb: 19 22 31;
-  --color-surface-panel: #11141c;
-  --color-surface-panel-rgb: 17 20 28;
+  /* Restrained ITS Accent */
+  --accent: #37D6B0;
+  --accent-rgb: 55 214 176;
+
+  /* Supporting Telemetry & State Colors */
+  --success: #42D392;
+  --success-rgb: 66 211 146;
+  --warning: #E8B84A;
+  --warning-rgb: 232 184 74;
+  --danger: #EF6262;
+  --danger-rgb: 239 98 98;
+  --info: #5EA7FF;
+  --info-rgb: 94 167 255;
+
+  /* High-Legibility Typography Hierarchy */
+  --text-primary: #EDF2F4;
+  --text-primary-rgb: 237 242 244;
+  --text-secondary: #8E9BA4;
+  --text-secondary-rgb: 142 155 164;
+  --text-muted: #56646E;
+  --text-muted-rgb: 86 100 110;
+
+  /* Soft Ambient Shadows */
+  --shadow-cockpit: 0 28px 72px -16px rgba(0, 0, 0, 0.8), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+
+  /* Backward Compatibility Aliases */
+  --color-canvas-solid: var(--background);
+  --color-canvas-solid-rgb: var(--background-rgb);
+  --color-cockpit-bg: var(--surface);
+  --color-cockpit-bg-rgb: var(--surface-rgb);
+  --color-cockpit-border: var(--border);
+  --color-cockpit-shadow: var(--shadow-cockpit);
+  --color-card-bg: var(--surface);
+  --color-card-bg-rgb: var(--surface-rgb);
+  --color-card-hover: var(--surface-elevated);
+  --color-card-hover-rgb: var(--surface-elevated-rgb);
+  --color-card-border: var(--border);
+  --color-pill-bg: var(--surface-elevated);
+  --color-pill-bg-rgb: var(--surface-elevated-rgb);
+  --color-pill-border: var(--border);
+  --color-text-primary: var(--text-primary);
+  --color-text-primary-rgb: var(--text-primary-rgb);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-secondary-rgb: var(--text-secondary-rgb);
+  --color-text-muted: var(--text-muted);
+  --color-text-muted-rgb: var(--text-muted-rgb);
+  --color-surface-raised: var(--surface);
+  --color-surface-raised-rgb: var(--surface-rgb);
+  --color-surface-panel: var(--background-secondary);
+  --color-surface-panel-rgb: var(--background-secondary-rgb);
 }
 
 html.light {
   color-scheme: light;
-  --color-canvas-solid: #e2e8f0;
-  --color-canvas-solid-rgb: 226 232 240;
-  --color-canvas-bg: radial-gradient(135% 100% at 50% 0%, #f8fafc 0%, #eef2f6 45%, #e2e8f0 100%);
-  
-  --color-cockpit-bg: #ffffff;
-  --color-cockpit-bg-rgb: 255 255 255;
-  --color-cockpit-border: #e2e8f0;
-  --color-cockpit-shadow: 0 25px 60px -12px rgba(15, 23, 42, 0.08), 0 0 35px -10px rgba(59, 130, 246, 0.04), inset 0 1px 0 0 rgba(255, 255, 255, 1);
 
-  --color-card-bg: #ffffff;
-  --color-card-bg-rgb: 255 255 255;
-  --color-card-hover: #f1f5f9;
-  --color-card-hover-rgb: 241 245 249;
-  --color-card-border: #e2e8f0;
+  --background: #F2F5F7;
+  --background-rgb: 242 245 247;
+  --background-secondary: #E7ECEF;
+  --background-secondary-rgb: 231 236 239;
 
-  --color-pill-bg: #f8fafc;
-  --color-pill-bg-rgb: 248 250 252;
-  --color-pill-border: #e2e8f0;
+  --surface: #FFFFFF;
+  --surface-rgb: 255 255 255;
+  --surface-elevated: #F8FAFB;
+  --surface-elevated-rgb: 248 250 251;
 
-  --color-text-primary: #0f172a;
-  --color-text-primary-rgb: 15 23 42;
-  --color-text-secondary: #475569;
-  --color-text-secondary-rgb: 71 85 105;
-  --color-text-muted: #64748b;
-  --color-text-muted-rgb: 100 116 139;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-rgb: 0 0 0;
 
-  --color-surface-raised: #f8fafc;
-  --color-surface-raised-rgb: 248 250 252;
-  --color-surface-panel: #ffffff;
-  --color-surface-panel-rgb: 255 255 255;
+  --accent: #19A784;
+  --accent-rgb: 25 167 132;
+
+  --success: #26A66E;
+  --success-rgb: 38 166 110;
+  --warning: #C49226;
+  --warning-rgb: 196 146 38;
+  --danger: #D94545;
+  --danger-rgb: 217 69 69;
+  --info: #3385E8;
+  --info-rgb: 51 133 232;
+
+  --text-primary: #10171B;
+  --text-primary-rgb: 16 23 27;
+  --text-secondary: #4C5963;
+  --text-secondary-rgb: 76 89 99;
+  --text-muted: #7A8994;
+  --text-muted-rgb: 122 137 148;
+
+  --shadow-cockpit: 0 20px 50px -10px rgba(15, 23, 42, 0.08), inset 0 1px 0 0 rgba(255, 255, 255, 1);
+
+  --color-canvas-solid: var(--background);
+  --color-canvas-solid-rgb: var(--background-rgb);
+  --color-cockpit-bg: var(--surface);
+  --color-cockpit-bg-rgb: var(--surface-rgb);
+  --color-cockpit-border: var(--border);
+  --color-cockpit-shadow: var(--shadow-cockpit);
+  --color-card-bg: var(--surface);
+  --color-card-bg-rgb: var(--surface-rgb);
+  --color-card-hover: var(--surface-elevated);
+  --color-card-hover-rgb: var(--surface-elevated-rgb);
+  --color-card-border: var(--border);
+  --color-pill-bg: var(--surface-elevated);
+  --color-pill-bg-rgb: var(--surface-elevated-rgb);
+  --color-pill-border: var(--border);
+  --color-text-primary: var(--text-primary);
+  --color-text-primary-rgb: var(--text-primary-rgb);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-secondary-rgb: var(--text-secondary-rgb);
+  --color-text-muted: var(--text-muted);
+  --color-text-muted-rgb: var(--text-muted-rgb);
+  --color-surface-raised: var(--surface);
+  --color-surface-raised-rgb: var(--surface-rgb);
+  --color-surface-panel: var(--background-secondary);
+  --color-surface-panel-rgb: var(--background-secondary-rgb);
 }
+
+/* ========================================================================= */
+/* 2. BACKGROUND ATMOSPHERE & SUBTLE GRID                                    */
+/* ========================================================================= */
 
 html {
   min-height: 100%;
-  background-color: var(--color-canvas-solid);
-  transition: background-color 0.4s ease;
+  background-color: var(--background);
 }
 
 body {
-  background-color: var(--color-canvas-solid);
-  background-image: var(--color-canvas-bg);
+  background-color: var(--background);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.016) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.016) 1px, transparent 1px),
+    radial-gradient(circle at 15% 20%, rgba(55, 214, 176, 0.045), transparent 35%),
+    radial-gradient(circle at 85% 80%, rgba(94, 167, 255, 0.035), transparent 40%);
+  background-size: 40px 40px, 40px 40px, 100% 100%, 100% 100%;
   background-attachment: fixed;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   font-family: "Inter", system-ui, sans-serif;
   min-height: 100vh;
   transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+html.light body {
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.02) 1px, transparent 1px),
+    radial-gradient(circle at 15% 20%, rgba(25, 167, 132, 0.03), transparent 35%),
+    radial-gradient(circle at 85% 80%, rgba(51, 133, 232, 0.025), transparent 40%);
 }
 
 ::-webkit-scrollbar {
@@ -94,93 +178,208 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: var(--color-card-border);
+  background-color: rgba(255, 255, 255, 0.12);
   border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.2);
 }
 ::-webkit-scrollbar-track {
   background-color: transparent;
 }
 
+/* ========================================================================= */
+/* 3. CARD BACKGROUNDS, HOVER GLOW & INTERACTION SURFACES                    */
+/* ========================================================================= */
+
 .dashboard-cockpit {
-  background-color: var(--color-cockpit-bg);
-  border: 1px solid var(--color-cockpit-border);
+  background: linear-gradient(
+    180deg,
+    rgba(13, 21, 23, 0.95) 0%,
+    rgba(10, 16, 18, 0.98) 100%
+  );
+  border: 1px solid var(--border);
   border-radius: 1.75rem;
-  box-shadow: var(--color-cockpit-shadow);
-  transition: all 0.3s ease;
+  box-shadow: var(--shadow-cockpit);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+html.light .dashboard-cockpit {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: var(--border);
+  box-shadow: var(--shadow-cockpit);
 }
 
 .card {
-  background-color: var(--color-card-bg);
-  border: 1px solid var(--color-card-border);
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.025) 0%,
+    rgba(255, 255, 255, 0.008) 100%
+  ), var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.065);
   border-radius: 1.25rem;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08);
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
+  transition: transform 220ms ease-out, border-color 220ms ease-out, box-shadow 220ms ease-out;
 }
 
-html.dark .card {
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25);
+html.light .card {
+  background: #FFFFFF;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
 }
 
-.card:hover {
-  border-color: rgba(59, 130, 246, 0.4);
-  box-shadow: 0 15px 35px -8px rgba(0, 0, 0, 0.15), 0 0 20px -5px rgba(59, 130, 246, 0.15);
+/* Contextual Close-In Hover Glow (180-250ms ease-out, restrained halo) */
+.card:hover,
+.card-interactive:hover {
+  border-color: rgba(55, 214, 176, 0.22);
+  box-shadow: 0 8px 28px -4px rgba(0, 0, 0, 0.55), 0 0 16px -2px rgba(55, 214, 176, 0.08);
+  transform: translateY(-1.5px);
+}
+
+html.light .card:hover,
+html.light .card-interactive:hover {
+  border-color: rgba(25, 167, 132, 0.3);
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.08), 0 0 12px -2px rgba(25, 167, 132, 0.1);
+  transform: translateY(-1.5px);
 }
 
 .card-interactive {
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
-}
-
-.card-interactive:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.2), 0 0 25px -5px rgba(56, 189, 248, 0.15);
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms ease-out, border-color 220ms ease-out;
 }
 
 .btn-tactile {
-  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease, background-color 0.15s ease;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease-out, border-color 0.18s ease-out, background-color 0.18s ease-out;
 }
 
 .btn-tactile:active {
-  transform: scale(0.96);
+  transform: scale(0.97);
 }
 
 .glass-pill {
-  background-color: var(--color-pill-bg);
-  border: 1px solid var(--color-pill-border);
+  background-color: var(--surface-elevated);
+  border: 1px solid var(--border);
   border-radius: 9999px;
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ========================================================================= */
+/* 4. LIVE INDICATOR BREATHING & SIGNAL ANIMATIONS                            */
+/* ========================================================================= */
+
+@keyframes live-breathing {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 6px 1px rgba(66, 211, 146, 0.45);
+  }
+  50% {
+    opacity: 0.65;
+    box-shadow: 0 0 2px 0px rgba(66, 211, 146, 0.18);
+  }
 }
 
 .status-dot {
   display: inline-block;
   width: 7px;
   height: 7px;
-  border-radius: 999px;
+  border-radius: 9999px;
+  animation: live-breathing 2.2s ease-in-out infinite;
 }
 
-.glow-neon {
-  filter: drop-shadow(0 0 18px rgba(244, 63, 94, 0.45)) drop-shadow(0 0 25px rgba(147, 51, 234, 0.35));
-  animation: neon-breathe 4s ease-in-out infinite alternate;
-}
-
-/* ========================================================================= */
-/* ADVANCED ANIMATIONS & KEYFRAMES                                           */
-/* ========================================================================= */
-
-/* CCTV Optical Scanline Beam */
-@keyframes scanline-beam {
+/* Signal Beacon Pulse (communicating state, not decoration) */
+@keyframes beacon-wave {
   0% {
-    top: -5%;
-    opacity: 0;
-  }
-  15% {
-    opacity: 0.85;
-  }
-  85% {
-    opacity: 0.85;
+    transform: scale(0.95);
+    opacity: 0.7;
   }
   100% {
-    top: 105%;
+    transform: scale(1.85);
+    opacity: 0;
+  }
+}
+
+.beacon-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 9999px;
+  pointer-events: none;
+  animation: beacon-wave 2.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+/* ========================================================================= */
+/* 5. SLOW AMBIENT LIGHT MOVEMENT (20-40s duration, ease-in-out)              */
+/* ========================================================================= */
+
+@keyframes ambient-drift-1 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(28px, -24px, 0) scale(1.06);
+  }
+}
+
+@keyframes ambient-drift-2 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-32px, 26px, 0) scale(0.95);
+  }
+}
+
+@keyframes ambient-drift-3 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(24px, 30px, 0) scale(1.04);
+  }
+}
+
+.animate-ambient-1 {
+  animation: ambient-drift-1 28s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-ambient-2 {
+  animation: ambient-drift-2 36s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-ambient-3 {
+  animation: ambient-drift-3 32s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Legacy float classes mapped cleanly to slow drift */
+.animate-float-slow {
+  animation: ambient-drift-1 28s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-float-slow-reverse {
+  animation: ambient-drift-2 36s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* ========================================================================= */
+/* 6. FAINT VIDEO SCANLINE & CCTV OPTICAL TREATMENT                           */
+/* ========================================================================= */
+
+@keyframes scanline-beam {
+  0% {
+    top: -2%;
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.65;
+  }
+  88% {
+    opacity: 0.65;
+  }
+  100% {
+    top: 102%;
     opacity: 0;
   }
 }
@@ -189,145 +388,60 @@ html.dark .card {
   position: absolute;
   left: 0;
   right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent 0%, rgba(56, 189, 248, 0.1) 15%, rgba(56, 189, 248, 0.85) 50%, rgba(56, 189, 248, 0.1) 85%, transparent 100%);
-  box-shadow: 0 0 12px 2px rgba(56, 189, 248, 0.6);
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(55, 214, 176, 0.05) 15%,
+    rgba(55, 214, 176, 0.45) 50%,
+    rgba(55, 214, 176, 0.05) 85%,
+    transparent 100%
+  );
+  box-shadow: 0 0 6px rgba(55, 214, 176, 0.25);
   pointer-events: none;
-  animation: scanline-beam 3.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation: scanline-beam 7.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: top, opacity;
 }
 
-/* Authentic CRT Scanline Pattern Overlay */
 .cctv-scanlines {
   background: linear-gradient(
-    rgba(18, 16, 16, 0) 50%, 
-    rgba(0, 0, 0, 0.25) 50%
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 0, 0, 0.18) 50%
   );
   background-size: 100% 3px;
   pointer-events: none;
 }
 
-/* Rotating Conical Radar Sweep */
-@keyframes radar-sweep {
+/* ========================================================================= */
+/* 7. REAL-TIME DATA, SKELETONS & GAUGE ANIMATIONS                            */
+/* ========================================================================= */
+
+/* Value Flash on Telemetry Update (smooth, subtle, non-bouncing) */
+@keyframes value-update-flash {
   0% {
-    transform: rotate(0deg);
+    opacity: 0.8;
+    color: var(--accent);
   }
   100% {
-    transform: rotate(360deg);
+    opacity: 1;
+    color: inherit;
   }
 }
 
-.animate-radar {
-  animation: radar-sweep 4s linear infinite;
+.animate-value-flash {
+  animation: value-update-flash 0.4s ease-out;
 }
 
-/* Signal & Priority Beacon Shockwaves */
-@keyframes beacon-wave {
-  0% {
-    transform: scale(0.95);
-    opacity: 0.85;
-  }
-  100% {
-    transform: scale(2.3);
-    opacity: 0;
-  }
+/* Smooth transition for bars, gauges, meters (400-700ms ease-out) */
+.gauge-bar-fill,
+.meter-fill,
+[role="progressbar"] > div,
+.progress-bar-fill {
+  transition: width 550ms cubic-bezier(0.16, 1, 0.3, 1), transform 550ms cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
-.beacon-ring {
-  position: absolute;
-  inset: -4px;
-  border-radius: 9999px;
-  pointer-events: none;
-  animation: beacon-wave 2s cubic-bezier(0, 0, 0.2, 1) infinite;
-}
-
-/* Glowing Border Beam for Active Allotment */
-@keyframes border-rotate {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-.border-beam-container {
-  position: relative;
-  overflow: hidden;
-  border-radius: inherit;
-}
-
-.border-beam {
-  position: absolute;
-  inset: -150%;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    transparent 70deg,
-    rgba(16, 185, 129, 0.85) 90deg,
-    transparent 110deg,
-    transparent 360deg
-  );
-  animation: border-rotate 4s linear infinite;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.border-beam-emergency {
-  position: absolute;
-  inset: -150%;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    transparent 70deg,
-    rgba(239, 68, 68, 0.95) 90deg,
-    transparent 110deg,
-    transparent 360deg
-  );
-  animation: border-rotate 2.5s linear infinite;
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* Ambient Floating Nebula Orbs */
-@keyframes float-slow {
-  0%, 100% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(30px, -25px) scale(1.08);
-  }
-}
-
-@keyframes float-slow-reverse {
-  0%, 100% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(-30px, 30px) scale(0.92);
-  }
-}
-
-.animate-float-slow {
-  animation: float-slow 16s ease-in-out infinite;
-}
-
-.animate-float-slow-reverse {
-  animation: float-slow-reverse 20s ease-in-out infinite;
-}
-
-/* Equalizer / Stream Activity Bars */
-@keyframes eq-bar-1 { 0%, 100% { height: 4px; } 50% { height: 13px; } }
-@keyframes eq-bar-2 { 0%, 100% { height: 12px; } 50% { height: 5px; } }
-@keyframes eq-bar-3 { 0%, 100% { height: 6px; } 50% { height: 14px; } }
-@keyframes eq-bar-4 { 0%, 100% { height: 13px; } 50% { height: 7px; } }
-
-.eq-bar-1 { animation: eq-bar-1 0.9s ease-in-out infinite; }
-.eq-bar-2 { animation: eq-bar-2 0.75s ease-in-out infinite 0.15s; }
-.eq-bar-3 { animation: eq-bar-3 0.85s ease-in-out infinite 0.3s; }
-.eq-bar-4 { animation: eq-bar-4 0.7s ease-in-out infinite 0.45s; }
-
-/* Shimmer Highlight Sweep */
-@keyframes shimmer-sweep {
+/* Low-Contrast Elegant Skeleton Shimmer (1.5s ease-in-out infinite) */
+@keyframes skeleton-shimmer {
   0% {
     background-position: -200% 0;
   }
@@ -336,53 +450,83 @@ html.dark .card {
   }
 }
 
-.animate-shimmer {
+.animate-shimmer,
+.skeleton-shimmer {
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.08) 50%,
-    rgba(255, 255, 255, 0) 100%
+    rgba(255, 255, 255, 0.015) 0%,
+    rgba(255, 255, 255, 0.055) 50%,
+    rgba(255, 255, 255, 0.015) 100%
   );
   background-size: 200% 100%;
-  animation: shimmer-sweep 3s ease-in-out infinite;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
 }
 
-html.light .animate-shimmer {
+html.light .animate-shimmer,
+html.light .skeleton-shimmer {
   background: linear-gradient(
     90deg,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0.03) 50%,
-    rgba(0, 0, 0, 0) 100%
+    rgba(0, 0, 0, 0.015) 0%,
+    rgba(0, 0, 0, 0.045) 50%,
+    rgba(0, 0, 0, 0.015) 100%
   );
   background-size: 200% 100%;
 }
 
-/* Neon Breathe */
-@keyframes neon-breathe {
-  0% {
-    filter: drop-shadow(0 0 14px rgba(244, 63, 94, 0.35)) drop-shadow(0 0 20px rgba(147, 51, 234, 0.25));
-  }
-  100% {
-    filter: drop-shadow(0 0 22px rgba(244, 63, 94, 0.55)) drop-shadow(0 0 32px rgba(147, 51, 234, 0.45));
-  }
-}
+/* ========================================================================= */
+/* 8. FAST SUBTLE PAGE TRANSITIONS (180-250ms, fade + 6px vertical)          */
+/* ========================================================================= */
 
-/* Value Flash on Telemetry Update */
-@keyframes value-update-flash {
+@keyframes page-enter {
   0% {
-    opacity: 0.4;
-    transform: scale(0.96);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.04);
+    opacity: 0;
+    transform: translateY(6px);
   }
   100% {
     opacity: 1;
-    transform: scale(1);
+    transform: translateY(0);
   }
 }
 
-.animate-value-flash {
-  animation: value-update-flash 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+main {
+  animation: page-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.page-transition {
+  animation: page-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Rotating Radar & EQ Bar utilities */
+@keyframes radar-sweep {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.animate-radar {
+  animation: radar-sweep 5s linear infinite;
+}
+
+@keyframes eq-bar-1 { 0%, 100% { height: 4px; } 50% { height: 12px; } }
+@keyframes eq-bar-2 { 0%, 100% { height: 11px; } 50% { height: 4px; } }
+@keyframes eq-bar-3 { 0%, 100% { height: 5px; } 50% { height: 13px; } }
+@keyframes eq-bar-4 { 0%, 100% { height: 12px; } 50% { height: 6px; } }
+
+.eq-bar-1 { animation: eq-bar-1 1.1s ease-in-out infinite; }
+.eq-bar-2 { animation: eq-bar-2 0.9s ease-in-out infinite 0.15s; }
+.eq-bar-3 { animation: eq-bar-3 1.0s ease-in-out infinite 0.3s; }
+.eq-bar-4 { animation: eq-bar-4 0.85s ease-in-out infinite 0.45s; }
+
+/* ========================================================================= */
+/* 9. ACCESSIBILITY: REDUCED MOTION OVERRIDES                                */
+/* ========================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

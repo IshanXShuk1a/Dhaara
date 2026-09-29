@@ -27,16 +27,16 @@ export function TrafficStatusDonut({ payload }: Props) {
 
   const total = laneList.length || 4;
   const data = [
-    { name: "Congested", value: congestedCount || 1, color: "#ff2a70" }, // Neon Red/Pink
-    { name: "Moderate", value: moderateCount || 1, color: "#38bdf8" },  // Cyan/Blue
-    { name: "Free / Low", value: freeCount || 2, color: isDark ? "#ffffff" : "#10b981" }, // White or Emerald
+    { name: "Congested", value: congestedCount || 1, color: "#EF6262" },
+    { name: "Moderate", value: moderateCount || 1, color: "#E8B84A" },
+    { name: "Free / Low", value: freeCount || 2, color: "#42D392" },
   ];
 
   return (
     <div className="card-interactive card p-4 flex flex-col justify-between h-full bg-surface-card relative overflow-hidden group">
       <div className="flex items-center justify-between mb-2">
         <div className="text-xs font-bold text-text-primary uppercase tracking-wide flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+          <span className="w-1.5 h-1.5 rounded-full bg-accent status-dot" />
           Traffic Density Status
         </div>
         <button className="text-text-muted hover:text-text-primary text-xs btn-tactile p-1">•••</button>
@@ -46,20 +46,15 @@ export function TrafficStatusDonut({ payload }: Props) {
         {/* Legend on left matching mockup */}
         <div className="space-y-2 text-xs">
           <div className="flex items-center gap-2 group/item cursor-pointer">
-            <span className="w-2.5 h-2.5 rounded-sm bg-[#ff2a70] shadow-sm shadow-[#ff2a70]/50 group-hover/item:scale-125 transition-transform" />
+            <span className="w-2.5 h-2.5 rounded-sm bg-[#EF6262] shadow-sm shadow-[#EF6262]/30 group-hover/item:scale-125 transition-transform" />
             <span className="text-text-secondary text-[11px]">Congested</span>
           </div>
           <div className="flex items-center gap-2 group/item cursor-pointer">
-            <span className="w-2.5 h-2.5 rounded-sm bg-[#38bdf8] shadow-sm shadow-[#38bdf8]/50 group-hover/item:scale-125 transition-transform" />
+            <span className="w-2.5 h-2.5 rounded-sm bg-[#E8B84A] shadow-sm shadow-[#E8B84A]/30 group-hover/item:scale-125 transition-transform" />
             <span className="text-text-secondary text-[11px]">Moderate</span>
           </div>
           <div className="flex items-center gap-2 group/item cursor-pointer">
-            <span
-              className={clsx(
-                "w-2.5 h-2.5 rounded-sm shadow-sm group-hover/item:scale-125 transition-transform",
-                isDark ? "bg-white shadow-white/50" : "bg-emerald-500 shadow-emerald-500/50"
-              )}
-            />
+            <span className="w-2.5 h-2.5 rounded-sm bg-[#42D392] shadow-sm shadow-[#42D392]/30 group-hover/item:scale-125 transition-transform" />
             <span className="text-text-secondary text-[11px]">Free / Low</span>
           </div>
         </div>
@@ -78,7 +73,7 @@ export function TrafficStatusDonut({ payload }: Props) {
                 paddingAngle={4}
                 dataKey="value"
                 stroke="none"
-                animationDuration={1200}
+                animationDuration={800}
                 animationEasing="ease-out"
               >
                 {data.map((entry, index) => (

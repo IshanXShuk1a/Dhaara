@@ -29,7 +29,7 @@ export function HourlyVolumeBar({ payload }: Props) {
     <div className="card-interactive card p-4 flex flex-col justify-between h-full bg-surface-card relative overflow-hidden group">
       <div className="flex items-center justify-between mb-1">
         <div className="text-xs font-bold text-text-primary uppercase tracking-wide flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+          <span className="w-1.5 h-1.5 rounded-full bg-accent status-dot" />
           Intersection Flow
         </div>
         <div className="text-right">
@@ -51,11 +51,11 @@ export function HourlyVolumeBar({ payload }: Props) {
               axisLine={false}
               dy={4}
             />
-            <Bar dataKey="volume" radius={[4, 4, 0, 0]} animationDuration={1200} animationEasing="ease-out">
+            <Bar dataKey="volume" radius={[4, 4, 0, 0]} animationDuration={800} animationEasing="ease-out">
               {DAYS_DATA.map((entry, index) => (
                 <Cell
                   key={`bar-${index}`}
-                  fill={index === 3 || index === 4 ? (isDark ? "#ffffff" : "#0284c7") : (isDark ? "#4b5563" : "#cbd5e1")}
+                  fill={index === 3 || index === 4 ? "#37D6B0" : (isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(0, 0, 0, 0.15)")}
                   className="hover:opacity-80 transition-opacity cursor-pointer"
                 />
               ))}

@@ -34,7 +34,7 @@ export function RightControlPanel({ payload }: Props) {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="text-xs font-bold text-text-primary uppercase tracking-wide flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-accent status-dot" />
             Approaches & Allotments
           </div>
           <button className="text-text-muted hover:text-text-primary text-xs btn-tactile p-1">•••</button>
@@ -67,8 +67,8 @@ export function RightControlPanel({ payload }: Props) {
                 className={clsx(
                   "p-2.5 rounded-xl flex items-center justify-between transition-all duration-300 btn-tactile cursor-pointer",
                   isAllotted
-                    ? "dark:bg-white dark:text-gray-950 dark:border-transparent dark:shadow-xl dark:ring-2 dark:ring-emerald-400 bg-emerald-50 text-slate-900 border border-emerald-300 ring-2 ring-emerald-500 shadow-md scale-[1.02]"
-                    : "bg-surface-pill text-text-primary hover:bg-surface-cardHover hover:translate-x-1 border border-surface-border"
+                    ? "bg-accent/[0.08] text-text-primary border border-accent/30 shadow-[0_0_16px_rgba(55,214,176,0.12)] relative before:absolute before:left-1.5 before:top-2.5 before:bottom-2.5 before:w-1 before:rounded-full before:bg-accent before:shadow-[0_0_6px_rgba(55,214,176,0.6)]"
+                    : "bg-surface-elevated/40 text-text-primary hover:bg-surface-elevated hover:translate-x-0.5 border border-surface-border"
                 )}
               >
                 {/* Left: Avatar + Title */}
@@ -78,31 +78,31 @@ export function RightControlPanel({ payload }: Props) {
                       className={clsx(
                         "w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-inner transition-colors",
                         isAllotted
-                          ? "dark:bg-gray-900 dark:text-white bg-emerald-600 text-white"
-                          : "bg-surface-card text-text-primary border border-surface-border"
+                          ? "bg-accent/20 text-accent border border-accent/40"
+                          : "bg-surface text-text-primary border border-surface-border"
                       )}
                     >
                       {appr.avatar}
                     </div>
                     {isAllotted ? (
                       <>
-                        <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 dark:ring-white ring-emerald-200" />
-                        <span className="beacon-ring border border-emerald-400" />
+                        <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent ring-2 ring-surface" />
+                        <span className="beacon-ring border border-accent/40" />
                       </>
                     ) : (
-                      <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-status-online ring-2 ring-surface-card" />
+                      <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-status-online status-dot ring-2 ring-surface" />
                     )}
                   </div>
 
                   <div className="min-w-0">
-                    <div className={clsx("text-xs font-bold truncate", isAllotted ? "dark:text-gray-950 text-slate-900" : "text-text-primary")}>
+                    <div className="text-xs font-bold truncate text-text-primary">
                       {appr.name}
                     </div>
-                    <div className={clsx("text-[10px] truncate flex items-center gap-1", isAllotted ? "dark:text-emerald-800 text-emerald-700 font-semibold" : "text-text-muted")}>
+                    <div className={clsx("text-[10px] truncate flex items-center gap-1", isAllotted ? "text-accent font-semibold" : "text-text-muted")}>
                       {isAllotted ? (
                         <>
                           <span>Allotted Green:</span>
-                          <AnimatedNumber value={countdown} decimals={0} suffix="s" className="font-extrabold" />
+                          <AnimatedNumber value={countdown} decimals={0} suffix="s" className="font-extrabold text-accent" />
                         </>
                       ) : (
                         <>
@@ -119,8 +119,8 @@ export function RightControlPanel({ payload }: Props) {
                   className={clsx(
                     "w-7 h-7 rounded-full flex items-center justify-center font-mono font-bold text-[10px] shrink-0 ml-2 transition-transform",
                     isAllotted
-                      ? "dark:bg-gray-900 dark:text-white bg-emerald-600 text-white shadow"
-                      : "bg-surface-card text-text-secondary border border-surface-border"
+                      ? "bg-accent/20 text-accent border border-accent/40 shadow-sm"
+                      : "bg-surface text-text-secondary border border-surface-border"
                   )}
                 >
                   <AnimatedNumber value={pressure} decimals={0} suffix="%" />
