@@ -29,8 +29,8 @@ from app.database.database import init_db, session_scope
 from app.models.user import User
 from app.core.auth import hash_password
 from app.services.controllers.intersection_controller import IntersectionController
-from app.services.cv.detector import SimulationDetector
-from app.services.cv.lane_assigner import LanePolygon
+from app.services.cv.detector import SmartAdaptiveDetector, SimulationDetector
+from app.services.cv.lane_assigner import LanePolygon, generate_full_frame_lanes, generate_full_frame_bboxes
 from app.services.cv.video_source import SimulationVideoSource
 from app.services.emergency.ambulance_analyzer import IntersectionCenter
 from app.services.simulation.simulation_engine import ScenarioProvider, SimulationScenarioBuilder, TrafficSliderState
@@ -38,7 +38,7 @@ from app.services.analytics.analytics_service import AnalyticsService
 from app.services.event_bus import event_bus, Event, EventType
 
 from app.api.routes import (
-    health, auth, intersections, lanes, traffic, signals, video, emergency, safety, analytics, simulation, events, config,
+    health, auth, intersections, lanes, traffic, signals, video, emergency, safety, analytics, simulation, events, config, classifier,
 )
 from app.api.websocket import router as websocket_router, connection_manager
 
@@ -57,25 +57,15 @@ app.add_middleware(
 
 for router in (health.router, auth.router, intersections.router, lanes.router, traffic.router,
                signals.router, video.router, emergency.router, safety.router, analytics.router,
-               simulation.router, events.router, config.router, websocket_router):
+               simulation.router, events.router, config.router, classifier.router, websocket_router):
     app.include_router(router)
 
 DEFAULT_INTERSECTION_ID = "OD-BBSR-001"
-WIDTH, HEIGHT = 640, 480
-CENTER_X, CENTER_Y = WIDTH // 2, HEIGHT // 2
+DEFAULT_WIDTH, DEFAULT_HEIGHT = 1280, 720
+CENTER_X, CENTER_Y = DEFAULT_WIDTH // 2, DEFAULT_HEIGHT // 2
 
-DEFAULT_LANES = [
-    LanePolygon(lane_id="NORTH", direction="NORTH", polygon=[(CENTER_X - 60, 0), (CENTER_X + 60, 0), (CENTER_X + 60, CENTER_Y - 60), (CENTER_X - 60, CENTER_Y - 60)]),
-    LanePolygon(lane_id="SOUTH", direction="SOUTH", polygon=[(CENTER_X - 60, CENTER_Y + 60), (CENTER_X + 60, CENTER_Y + 60), (CENTER_X + 60, HEIGHT), (CENTER_X - 60, HEIGHT)]),
-    LanePolygon(lane_id="EAST", direction="EAST", polygon=[(CENTER_X + 60, CENTER_Y - 60), (WIDTH, CENTER_Y - 60), (WIDTH, CENTER_Y + 60), (CENTER_X + 60, CENTER_Y + 60)]),
-    LanePolygon(lane_id="WEST", direction="WEST", polygon=[(0, CENTER_Y - 60), (CENTER_X - 60, CENTER_Y - 60), (CENTER_X - 60, CENTER_Y + 60), (0, CENTER_Y + 60)]),
-]
-DEFAULT_LANE_BBOXES = {
-    "NORTH": (CENTER_X - 60, 10, CENTER_X + 60, CENTER_Y - 70),
-    "SOUTH": (CENTER_X - 60, CENTER_Y + 70, CENTER_X + 60, HEIGHT - 10),
-    "EAST": (CENTER_X + 70, CENTER_Y - 60, WIDTH - 10, CENTER_Y + 60),
-    "WEST": (10, CENTER_Y - 60, CENTER_X - 70, CENTER_Y + 60),
-}
+DEFAULT_LANES = generate_full_frame_lanes(DEFAULT_WIDTH, DEFAULT_HEIGHT)
+DEFAULT_LANE_BBOXES = generate_full_frame_bboxes(DEFAULT_WIDTH, DEFAULT_HEIGHT)
 
 from app.services.controllers.regional_coordinator import RegionalTrafficCoordinator
 regional_coordinator = RegionalTrafficCoordinator()
@@ -114,11 +104,38 @@ def _register_default_intersection() -> None:
     from app.models.intersection import Intersection
     from app.models.lane import Lane
 
+    import os
+    candidate_video_paths = [
+        "./videos/123.mp4",
+        "backend/videos/123.mp4",
+        "../videos/123.mp4",
+        settings.video_source,
+    ]
+    resolved_video_source = next((p for p in candidate_video_paths if os.path.exists(p)), settings.video_source)
+
+    vid_w, vid_h = DEFAULT_WIDTH, DEFAULT_HEIGHT
+    try:
+        import cv2
+        cap = cv2.VideoCapture(resolved_video_source)
+        if cap.isOpened():
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            if w > 0 and h > 0:
+                vid_w, vid_h = w, h
+            cap.release()
+    except Exception:
+        pass
+
+    full_lanes = generate_full_frame_lanes(vid_w, vid_h)
+    full_bboxes = generate_full_frame_bboxes(vid_w, vid_h)
+    cx, cy = vid_w // 2, vid_h // 2
+
     with session_scope() as db:
         if db.get(Intersection, DEFAULT_INTERSECTION_ID) is None:
             db.add(Intersection(id=DEFAULT_INTERSECTION_ID, name="Master Canteen Square", location="Bhubaneswar Central", status="ONLINE"))
-        for lane in DEFAULT_LANES:
-            if db.get(Lane, f"{DEFAULT_INTERSECTION_ID}:{lane.direction}") is None:
+        for lane in full_lanes:
+            existing = db.get(Lane, f"{DEFAULT_INTERSECTION_ID}:{lane.direction}")
+            if existing is None:
                 db.add(Lane(
                     id=f"{DEFAULT_INTERSECTION_ID}:{lane.direction}",
                     intersection_id=DEFAULT_INTERSECTION_ID,
@@ -126,35 +143,42 @@ def _register_default_intersection() -> None:
                     polygon=[list(p) for p in lane.polygon],
                     pixels_per_meter=lane.pixels_per_meter,
                 ))
+            else:
+                existing.polygon = [list(p) for p in lane.polygon]
+                existing.pixels_per_meter = lane.pixels_per_meter
 
     provider = ScenarioProvider()
-    builder = SimulationScenarioBuilder(provider, DEFAULT_LANE_BBOXES)
-    detector = SimulationDetector(provider)
+    builder = SimulationScenarioBuilder(provider, full_bboxes)
+    detector = SmartAdaptiveDetector(
+        model_path=settings.model_path,
+        scenario_provider=provider,
+        confidence_threshold=0.22,
+    )
     controller = IntersectionController(
         intersection_id=DEFAULT_INTERSECTION_ID,
-        lanes=DEFAULT_LANES,
+        lanes=full_lanes,
         directions=["NORTH", "SOUTH", "EAST", "WEST"],
         detector=detector,
-        intersection_center=IntersectionCenter(x=CENTER_X, y=CENTER_Y),
+        intersection_center=IntersectionCenter(x=cx, y=cy),
     )
-    video_source = SimulationVideoSource(settings.video_source)
-    app_state.register(
-        DEFAULT_INTERSECTION_ID,
-        IntersectionRuntime(
-            controller=controller,
-            video_source=video_source,
-            scenario_provider=provider,
-            scenario_builder=builder,
-            lanes=DEFAULT_LANES,
-            camera_status="ONLINE",
-        ),
+    video_source = SimulationVideoSource(resolved_video_source)
+    runtime = IntersectionRuntime(
+        controller=controller,
+        video_source=video_source,
+        scenario_provider=provider,
+        scenario_builder=builder,
+        lanes=full_lanes,
+        camera_status="ONLINE",
     )
+    runtime._calibrated_resolution = (vid_w, vid_h)
+    app_state.register(DEFAULT_INTERSECTION_ID, runtime)
+
     builder.apply_slider_state(
         TrafficSliderState(north=6, south=14, east=9, west=4),
         current_frame=0,
     )
     regional_coordinator.register(controller)
-    logger.info(f"Registered default intersection {DEFAULT_INTERSECTION_ID}")
+    logger.info(f"Registered default intersection {DEFAULT_INTERSECTION_ID} with FULL FRAME ({vid_w}x{vid_h}) analysis region")
 
 
 def _register_regional_intersections() -> None:
@@ -167,13 +191,27 @@ def _register_regional_intersections() -> None:
         ("OD-BBSR-004", "Khandagiri Chowk", "Khandagiri / Baramunda", "EMERGENCY", TrafficSliderState(north=5, south=7, east=4, west=25)),
     ]
 
+    import os
+    candidate_video_paths = [
+        "./videos/123.mp4",
+        "backend/videos/123.mp4",
+        "../videos/123.mp4",
+        settings.video_source,
+    ]
+    resolved_video_source = next((p for p in candidate_video_paths if os.path.exists(p)), settings.video_source)
+
     for int_id, name, location, status, sliders in specs:
+        full_lanes = generate_full_frame_lanes(DEFAULT_WIDTH, DEFAULT_HEIGHT)
+        full_bboxes = generate_full_frame_bboxes(DEFAULT_WIDTH, DEFAULT_HEIGHT)
+        cx, cy = DEFAULT_WIDTH // 2, DEFAULT_HEIGHT // 2
+
         with session_scope() as db:
             if db.get(Intersection, int_id) is None:
                 db.add(Intersection(id=int_id, name=name, location=location, status=status))
-            for lane in DEFAULT_LANES:
+            for lane in full_lanes:
                 lane_key = f"{int_id}:{lane.direction}"
-                if db.get(Lane, lane_key) is None:
+                existing = db.get(Lane, lane_key)
+                if existing is None:
                     db.add(Lane(
                         id=lane_key,
                         intersection_id=int_id,
@@ -181,34 +219,40 @@ def _register_regional_intersections() -> None:
                         polygon=[list(p) for p in lane.polygon],
                         pixels_per_meter=lane.pixels_per_meter,
                     ))
+                else:
+                    existing.polygon = [list(p) for p in lane.polygon]
+                    existing.pixels_per_meter = lane.pixels_per_meter
 
         provider = ScenarioProvider()
-        builder = SimulationScenarioBuilder(provider, DEFAULT_LANE_BBOXES)
-        detector = SimulationDetector(provider)
+        builder = SimulationScenarioBuilder(provider, full_bboxes)
+        detector = SmartAdaptiveDetector(
+            model_path=settings.model_path,
+            scenario_provider=provider,
+            confidence_threshold=0.22,
+        )
         controller = IntersectionController(
             intersection_id=int_id,
-            lanes=DEFAULT_LANES,
+            lanes=full_lanes,
             directions=["NORTH", "SOUTH", "EAST", "WEST"],
             detector=detector,
-            intersection_center=IntersectionCenter(x=CENTER_X, y=CENTER_Y),
+            intersection_center=IntersectionCenter(x=cx, y=cy),
         )
-        video_source = SimulationVideoSource(settings.video_source)
-        app_state.register(
-            int_id,
-            IntersectionRuntime(
-                controller=controller,
-                video_source=video_source,
-                scenario_provider=provider,
-                scenario_builder=builder,
-                lanes=DEFAULT_LANES,
-                camera_status="ONLINE",
-            ),
+        video_source = SimulationVideoSource(resolved_video_source)
+        reg_runtime = IntersectionRuntime(
+            controller=controller,
+            video_source=video_source,
+            scenario_provider=provider,
+            scenario_builder=builder,
+            lanes=full_lanes,
+            camera_status="ONLINE",
         )
+        reg_runtime._calibrated_resolution = (DEFAULT_WIDTH, DEFAULT_HEIGHT)
+        app_state.register(int_id, reg_runtime)
         builder.apply_slider_state(sliders, current_frame=0)
         if int_id == "OD-BBSR-004":
             builder.spawn_ambulance("WEST", current_frame=0)
         regional_coordinator.register(controller)
-        logger.info(f"Registered regional intersection {int_id} ({name})")
+        logger.info(f"Registered regional intersection {int_id} ({name}) with FULL FRAME analysis region")
 
 
 async def _control_loop() -> None:
@@ -216,11 +260,15 @@ async def _control_loop() -> None:
     persist_every_n_ticks = 25
     tick_count = 0
 
-    for runtime in app_state.runtimes.values():
+    for intersection_id, runtime in app_state.runtimes.items():
         try:
             runtime.video_source.open()
+            first_frame = runtime.video_source.read()
+            runtime.frame_index = first_frame.frame_index
+            runtime.last_frame_image = first_frame.image
+            runtime.controller.process_frame(first_frame.image, first_frame.frame_index, dt_seconds=1 / tick_hz)
         except Exception as exc:
-            logger.error(f"Video source failed to open: {exc}")
+            logger.error(f"Video source for {intersection_id} failed to initialize: {exc}")
             runtime.camera_status = "OFFLINE"
 
     try:
@@ -242,6 +290,18 @@ async def _control_loop() -> None:
 
                 runtime.frame_index = frame.frame_index
                 runtime.last_frame_image = frame.image
+
+                # Dynamically calibrate analysis region & lane geometry to the exact full frame dimensions
+                if frame.image is not None and getattr(frame.image, "size", 0) > 0:
+                    img_h, img_w = frame.image.shape[:2]
+                    if getattr(runtime, "_calibrated_resolution", None) != (img_w, img_h):
+                        new_lanes = generate_full_frame_lanes(img_w, img_h)
+                        new_center = IntersectionCenter(x=img_w // 2, y=img_h // 2)
+                        runtime.lanes = new_lanes
+                        runtime.controller.update_lane_geometry(new_lanes, new_center)
+                        runtime._calibrated_resolution = (img_w, img_h)
+                        logger.info(f"[{intersection_id}] Calibrated analysis region to FULL FRAME ({img_w}x{img_h})")
+
                 snapshot = runtime.controller.process_frame(frame.image, frame.frame_index, dt_seconds=1 / tick_hz)
                 runtime.hardware_controller.apply_state(intersection_id, runtime.controller.signal_fsm.state)
 

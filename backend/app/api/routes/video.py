@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import shutil
+import time
 import uuid
 from pathlib import Path
+
+import numpy as np
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
@@ -119,26 +122,46 @@ def get_annotated_frame(
     runtime = app_state.get(intersection_id)
     if runtime is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intersection not configured")
-    if runtime.camera_status != "ONLINE" or runtime.controller.last_snapshot is None or runtime.last_frame_image is None:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No live frame available")
+
+    # Safely retrieve frame from control loop, waiting briefly if initializing
+    frame_image = runtime.last_frame_image
+    if frame_image is None:
+        for _ in range(8):
+            time.sleep(0.04)
+            frame_image = runtime.last_frame_image
+            if frame_image is not None:
+                break
+
+    if frame_image is None or getattr(frame_image, "size", 0) == 0:
+        w, h = 1280, 720
+        canvas = np.full((h, w, 3), (38, 40, 44), dtype=np.uint8)
+        cv2.rectangle(canvas, (0, int(h * 0.25)), (w, int(h * 0.75)), (52, 54, 60), -1)
+        cv2.rectangle(canvas, (int(w * 0.25), 0), (int(w * 0.75), h), (52, 54, 60), -1)
+        frame_image = canvas
 
     snapshot = runtime.controller.last_snapshot
     renderer = OverlayRenderer(runtime.lanes)
 
-    confirmed_amb_id = runtime.controller.emergency_manager.active_track_id
-    helmet_states = getattr(snapshot, "vehicle_helmet_states", {})
-    vehicle_items = [
-        VehicleOverlayItem(
-            track=t,
-            lane_assignment=a,
-            is_ambulance_confirmed=(t.track_id == confirmed_amb_id or t.class_name == "ambulance"),
-            helmet_label=helmet_states.get(t.track_id),
-        )
-        for t, a in snapshot.vehicles
-    ]
+    if snapshot is None:
+        lane_metrics = {}
+        vehicle_items = []
+    else:
+        lane_metrics = snapshot.lane_metrics
+        confirmed_amb_id = runtime.controller.emergency_manager.active_track_id
+        helmet_states = getattr(snapshot, "vehicle_helmet_states", {})
+        vehicle_items = [
+            VehicleOverlayItem(
+                track=t,
+                lane_assignment=a,
+                is_ambulance_confirmed=(t.track_id == confirmed_amb_id or t.class_name == "ambulance"),
+                helmet_label=helmet_states.get(t.track_id),
+            )
+            for t, a in snapshot.vehicles
+        ]
+
     annotated = renderer.render(
-        runtime.last_frame_image,
-        snapshot.lane_metrics,
+        frame_image,
+        lane_metrics,
         vehicle_items,
         show_lanes=show_lanes,
         show_boxes=show_boxes,
@@ -197,13 +220,14 @@ def get_annotated_frame(
         cv2.putText(annotated, f"{cam_id} • {dir_upper} APPROACH", (24, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
 
         # Top Right: Allotment status
-        is_allotted = (snapshot.signal_active_direction == dir_upper and snapshot.signal_state == "GREEN")
-        is_yellow = (snapshot.signal_active_direction == dir_upper and snapshot.signal_state == "YELLOW")
+        is_allotted = bool(snapshot and snapshot.signal_active_direction == dir_upper and snapshot.signal_state == "GREEN")
+        is_yellow = bool(snapshot and snapshot.signal_active_direction == dir_upper and snapshot.signal_state == "YELLOW")
+        countdown = snapshot.signal_countdown_s if snapshot else 0.0
         if is_allotted:
-            badge_text = f"ALLOTTED: GREEN [{snapshot.signal_countdown_s:.0f}s]"
+            badge_text = f"ALLOTTED: GREEN [{countdown:.0f}s]"
             badge_color = (60, 220, 60)
         elif is_yellow:
-            badge_text = f"CLEARING: YELLOW [{snapshot.signal_countdown_s:.0f}s]"
+            badge_text = f"CLEARING: YELLOW [{countdown:.0f}s]"
             badge_color = (0, 200, 255)
         else:
             badge_text = "WAITING IN QUEUE"
@@ -213,7 +237,7 @@ def get_annotated_frame(
         cv2.putText(annotated, badge_text, (w_ann - tw - 12, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.45, badge_color, 1, cv2.LINE_AA)
 
         # Bottom Left: Calculated Density & Metrics
-        lane_m = snapshot.lane_metrics.get(dir_upper)
+        lane_m = snapshot.lane_metrics.get(dir_upper) if snapshot else None
         if lane_m:
             dens_text = f"DENSITY: {lane_m.traffic_pressure:.1f}% ({lane_m.status.value}) | {lane_m.vehicle_count} VEHICLES | QUEUE: {lane_m.queue_length_m:.0f}m"
         else:

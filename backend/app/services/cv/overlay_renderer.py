@@ -72,13 +72,17 @@ class OverlayRenderer:
             color = STATUS_COLORS.get(metrics.status, (200, 200, 200)) if metrics else (150, 150, 150)
             cv2.polylines(frame, [pts], isClosed=True, color=color, thickness=2)
 
-            label_point = lane.polygon[0]
-            label_lines = [lane.lane_id]
+            min_x = min(p[0] for p in lane.polygon)
+            min_y = min(p[1] for p in lane.polygon)
+
+            lx = int(max(14, min_x + 14))
+            ly = int(max(26, min_y + 24))
+
+            label_lines = [f"{lane.lane_id} APPROACH"]
             if metrics:
-                label_lines.append(metrics.status.value)
-                label_lines.append(f"{metrics.vehicle_count} VEHICLES")
-                label_lines.append(f"{int(metrics.occupancy * 100)}%")
-            self._draw_label_block(frame, (int(label_point[0]) + 4, int(label_point[1]) + 16), label_lines, color)
+                label_lines.append(f"{metrics.status.value} • {metrics.vehicle_count} VEHICLES")
+                label_lines.append(f"DENSITY: {int(metrics.occupancy * 100)}%")
+            self._draw_label_block(frame, (lx, ly), label_lines, color)
 
     def _draw_vehicles(self, frame: np.ndarray, vehicles: list[VehicleOverlayItem], show_labels: bool = True) -> None:
         for item in vehicles:

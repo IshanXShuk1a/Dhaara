@@ -89,12 +89,20 @@ class IntersectionController:
         self._emergency = EmergencyManager()
         self._helmet_analyzer = HelmetAnalyzer(config.detection)
         self._helmet_detector = HelmetDetector(confidence_threshold=config.detection.helmet_confidence)
-        self._track_helmet_states: dict[int, str] = {}
+        self._lanes = lanes
         self._lane_geometry = lane_geometry or {
             l.lane_id: LaneGeometry(lane_id=l.lane_id) for l in lanes
         }
         self.decision_log: list[SignalDecision] = []
         self.last_snapshot: IntersectionSnapshot | None = None
+
+    def update_lane_geometry(self, lanes: list[LanePolygon], center: IntersectionCenter | None = None) -> None:
+        """Update lane polygons and center coordinate to match the full frame dimensions of the active video feed."""
+        self._lanes = lanes
+        self._lane_assigner = LaneAssigner(lanes, fps=self._lane_assigner._fps)
+        self._lane_geometry = {l.lane_id: LaneGeometry(lane_id=l.lane_id) for l in lanes}
+        if center is not None:
+            self._ambulance_analyzer = AmbulanceAnalyzer(self._ambulance_confirmation, center)
 
     def process_frame(self, image, frame_index: int, dt_seconds: float = 1 / 25.0) -> IntersectionSnapshot:
         timestamp = time.time()

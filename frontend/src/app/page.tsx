@@ -2,7 +2,7 @@
 
 import { useIntersections } from "@/lib/intersectionContext";
 import { useIntersectionSocket } from "@/lib/useIntersectionSocket";
-import { MultiLaneQuadView } from "@/components/dashboard/MultiLaneQuadView";
+import { SingleFeedCameraCard } from "@/components/dashboard/SingleFeedCameraCard";
 import { TrafficStatusDonut } from "@/components/charts/TrafficStatusDonut";
 import { HourlyVolumeBar } from "@/components/charts/HourlyVolumeBar";
 import { GlowingActivityChart } from "@/components/charts/GlowingActivityChart";
@@ -37,9 +37,9 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
         {/* CENTER MAIN COLUMN (Width 8.5 / 12 on XL) */}
         <div className="xl:col-span-8 space-y-5">
-          {/* Row 1: 4 Approach CCTV Screens (My Courses layout with video, density, and allotment) */}
+          {/* Row 1: Single High-Definition Live Camera Feed (Reverted from 4-cam to 1-cam feed) */}
           <div>
-            <MultiLaneQuadView intersectionId={selectedId} payload={payload} wsStatus={status} />
+            <SingleFeedCameraCard intersectionId={selectedId} payload={payload} wsStatus={status} />
           </div>
 
           {/* Row 2: Two Stat Cards matching Course Statistics (Donut) & Study Hours (Bar) */}

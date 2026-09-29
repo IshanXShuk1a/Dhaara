@@ -192,6 +192,41 @@ export const api = {
       average_network_pressure: number;
       average_network_speed_kmph: number;
     }>("/api/analytics"),
+  classifyImage: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request<import("./types").TrafficClassificationResult>("/api/classifier/classify", {
+      method: "POST",
+      body: formData,
+      isForm: true,
+    });
+  },
+  getClassifierPresets: () =>
+    request<import("./types").ClassifierPreset[]>("/api/classifier/presets"),
+  classifyPreset: (presetId: string) =>
+    request<import("./types").TrafficClassificationResult>(`/api/classifier/classify-preset/${presetId}`, {
+      method: "POST",
+    }),
+  classifyQuadImages: (files: File[], labels?: string[]) => {
+    const formData = new FormData();
+    files.forEach((file, index) => {
+      formData.append(`file${index + 1}`, file);
+      if (labels && labels[index]) {
+        formData.append(`label${index + 1}`, labels[index]);
+      }
+    });
+    return request<import("./types").QuadClassificationResult>("/api/classifier/classify-quad", {
+      method: "POST",
+      body: formData,
+      isForm: true,
+    });
+  },
+  getQuadClassifierPresets: () =>
+    request<import("./types").ClassifierPreset[]>("/api/classifier/quad-presets"),
+  classifyQuadPreset: (presetId: string) =>
+    request<import("./types").QuadClassificationResult>(`/api/classifier/classify-quad-preset/${presetId}`, {
+      method: "POST",
+    }),
 };
 
 export function wsBase(): string {

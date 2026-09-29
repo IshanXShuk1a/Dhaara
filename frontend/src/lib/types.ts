@@ -139,3 +139,100 @@ export interface IntersectionWsPayload {
     }
   >;
 }
+
+export interface DetectedVehicleItem {
+  class: string;
+  confidence: number;
+  bbox: [number, number, number, number];
+}
+
+export interface TrafficClassificationResult {
+  success: boolean;
+  filename: string;
+  classification: {
+    code: "FREE_FLOW" | "MODERATE" | "HEAVY" | "GRIDLOCK" | "EMERGENCY_PRIORITY";
+    label: string;
+    severity: "INFO" | "LOW" | "MODERATE" | "HIGH" | "CRITICAL";
+    badge_color: "emerald" | "amber" | "orange" | "rose" | "red";
+    density_percentage: number;
+    total_vehicles: number;
+    vehicle_counts: Record<string, number>;
+    emergency_detected: boolean;
+    helmet_compliance: {
+      compliant: number;
+      violations: number;
+      total_two_wheelers: number;
+    };
+    safety_alerts: string[];
+    recommended_green_s: number;
+    ai_reasoning: string;
+    latency_ms: number;
+    approach_breakdown?: Record<string, { queue_length_m: number; status: string; vehicles: number }>;
+  };
+  video_metadata?: {
+    duration_s: number;
+    total_frames: number;
+    fps: number;
+    width: number;
+    height: number;
+    sampled_frames: number;
+    approach_queues: Record<string, number>;
+  };
+  detections: DetectedVehicleItem[];
+  annotated_image: string;
+  image_dimensions: { width: number; height: number };
+}
+
+export interface ClassifierPreset {
+  id: string;
+  title: string;
+  description: string;
+  expected_state: string;
+  icon: string;
+}
+
+export interface QuadApproachResult {
+  index: number;
+  label: string;
+  filename: string;
+  rank: number;
+  relative_traffic_level: "EMERGENCY_CORRIDOR" | "CRITICAL_DOMINANT" | "ELEVATED_DEMAND" | "BALANCED_NORMAL" | "SUBORDINATE_LIGHT";
+  relative_status_label: string;
+  relative_badge_color: "red" | "rose" | "orange" | "amber" | "emerald";
+  relative_share_percentage: number;
+  recommended_green_s: number;
+  density_percentage: number;
+  total_vehicles: number;
+  vehicle_counts: Record<string, number>;
+  emergency_detected: boolean;
+  safety_alerts: string[];
+  classification_code: string;
+  classification_label: string;
+  annotated_image: string;
+  detections: DetectedVehicleItem[];
+  image_dimensions: { width: number; height: number };
+}
+
+export interface QuadClassificationResult {
+  success: boolean;
+  mode: "QUAD_COMPARATIVE";
+  timestamp: number;
+  latency_ms: number;
+  comparative_summary: {
+    overall_code: "EMERGENCY_PREEMPTION" | "ASYMMETRIC_BOTTLENECK" | "UNIFORM_GRIDLOCK" | "TIDAL_ARTERIAL_SURGE" | "BALANCED_MODERATE" | "FREE_FLOW_ALL";
+    overall_label: string;
+    overall_severity: "INFO" | "LOW" | "MODERATE" | "HIGH" | "CRITICAL";
+    overall_badge_color: "red" | "rose" | "orange" | "amber" | "emerald";
+    ai_recommendation: string;
+    imbalance_percentage: number;
+    total_intersection_vehicles: number;
+    average_density_percentage: number;
+    highest_demand_approach: string;
+    highest_demand_share: number;
+    emergency_active: boolean;
+    cycle_length_s: number;
+  };
+  approaches: QuadApproachResult[];
+}
+
+
