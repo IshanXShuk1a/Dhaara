@@ -74,7 +74,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     let detail = response.statusText;
     try {
       const errBody = await response.json();
-      detail = errBody.detail || detail;
+      detail = Array.isArray(errBody.detail) ? errBody.detail.map((e: {msg?: string}) => e.msg ?? "Invalid input").join("; ") : errBody.detail || detail;
     } catch {
       /* body wasn't JSON - keep statusText */
     }
@@ -144,20 +144,15 @@ export const api = {
   stopVideo: (intersectionId: string) => request(`/api/video/stop`, { method: "POST", params: { intersection_id: intersectionId } }),
   videoStatus: (intersectionId: string) => request(`/api/video/status`, { params: { intersection_id: intersectionId } }),
 
-  setSimulationTraffic: (intersectionId: string, sliders: { north: number; south: number; east: number; west: number }) =>
-    request(`/api/simulation/traffic`, { method: "POST", params: { intersection_id: intersectionId }, body: sliders }),
-
-  spawnAmbulance: (intersectionId: string, direction: string) =>
-    request(`/api/simulation/ambulance`, { method: "POST", params: { intersection_id: intersectionId }, body: { direction } }),
-
-  spawnHelmetViolation: (intersectionId: string, direction: string) =>
-    request(`/api/simulation/helmet-violation`, {
-      method: "POST",
-      params: { intersection_id: intersectionId },
-      body: { direction },
+  getSimulation: () => request<import("./simulation").SimulationSnapshot>("/api/simulation/state"),
+  setSimulationScenario: (scenario: import("./simulation").SimulationScenario) =>
+    request<import("./simulation").SimulationSnapshot>("/api/simulation/scenario", { method: "POST", body: { scenario } }),
+  controlSimulation: (control: { paused?: boolean; speed?: import("./simulation").SimulationSpeed }) =>
+    request<import("./simulation").SimulationSnapshot>("/api/simulation/control", { method: "POST", body: control }),
+  simulationAmbulance: (direction: string, lightsActive: boolean) =>
+    request<import("./simulation").SimulationSnapshot>("/api/simulation/ambulance", {
+      method: "POST", body: { direction, lights_active: lightsActive },
     }),
-
-  resetSimulation: (intersectionId: string) => request(`/api/simulation/reset`, { method: "POST", params: { intersection_id: intersectionId } }),
 
   listAllEmergencies: () => request<Array<Record<string, unknown>>>("/api/emergency"),
   listAllSafetyEvents: () => request<Array<Record<string, unknown>>>("/api/safety"),
@@ -165,7 +160,6 @@ export const api = {
     request<{
       detection: Record<string, number>;
       signal_timings: Record<string, number>;
-      fairness: Record<string, number>;
       lane_thresholds: Record<string, number>;
       pressure_weights: Record<string, number>;
     }>("/api/config"),
@@ -174,12 +168,13 @@ export const api = {
       status: string;
       detection: Record<string, number>;
       signal_timings: Record<string, number>;
-      fairness: Record<string, number>;
       lane_thresholds: Record<string, number>;
       pressure_weights: Record<string, number>;
     }>("/api/config", { method: "PUT", body: data }),
+  getScoreHistory: (intersectionId: string) => request<{records: import("./types").ScoreRecord[]}>(`/api/intersections/${intersectionId}/traffic/scores/history`),
+  getLanes: (intersectionId: string) => request<import("./types").LaneConfig[]>(`/api/intersections/${intersectionId}/lanes`),
   updateLanes: (intersectionId: string, lanes: unknown[]) =>
-    request<import("./types").LaneMetrics[]>(`/api/intersections/${intersectionId}/lanes`, {
+    request<import("./types").LaneConfig[]>(`/api/intersections/${intersectionId}/lanes`, {
       method: "PUT",
       body: lanes,
     }),

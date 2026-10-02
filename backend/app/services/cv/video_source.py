@@ -78,34 +78,26 @@ class UploadedVideoSource(BaseVideoSource):
         self._height = 0
         self._lock = threading.Lock()
 
+    def _open_locked(self) -> None:
+        import cv2
+        # Resolve this configured path only. Never substitute another camera.
+        if not self._path.is_absolute():
+            self._path = Path(__file__).resolve().parents[3] / self._path
+        if not self._path.is_file():
+            raise VideoSourceError(f"Uploaded video not found: {self._path}")
+        cap = cv2.VideoCapture(str(self._path))
+        if not cap.isOpened():
+            cap.release()
+            raise VideoSourceError(f"Could not decode video file: {self._path}")
+        self._cap = cap
+        self._fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+        self._width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self._height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
     def open(self) -> None:
-        import cv2  # local import: keeps this module importable without cv2 for type-checking tools
-
         with self._lock:
-            # Candidate path auto-resolution (supports running from root or backend directory)
-            candidate_paths = [
-                self._path,
-                Path("backend") / self._path,
-                Path("..") / self._path,
-                Path("./videos/123.mp4"),
-                Path("backend/videos/123.mp4"),
-                Path("../videos/123.mp4"),
-                Path("./videos/sample_intersection.mp4"),
-                Path("backend/videos/sample_intersection.mp4"),
-            ]
-            resolved = next((p for p in candidate_paths if p.exists()), None)
-            if resolved is not None:
-                self._path = resolved
-
-            if not self._path.exists():
-                raise VideoSourceError(f"Uploaded video not found: {self._path}")
-            cap = cv2.VideoCapture(str(self._path))
-            if not cap.isOpened():
-                raise VideoSourceError(f"Could not decode video file: {self._path}")
-            self._cap = cap
-            self._fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
-            self._width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            self._height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            if self._cap is None:
+                self._open_locked()
 
     def is_open(self) -> bool:
         with self._lock:
@@ -115,47 +107,16 @@ class UploadedVideoSource(BaseVideoSource):
         import cv2
         with self._lock:
             if self._cap is None or not self._cap.isOpened():
-                candidate_paths = [
-                    self._path,
-                    Path("backend") / self._path,
-                    Path("..") / self._path,
-                    Path("./videos/123.mp4"),
-                    Path("backend/videos/123.mp4"),
-                    Path("../videos/123.mp4"),
-                    Path("./videos/sample_intersection.mp4"),
-                    Path("backend/videos/sample_intersection.mp4"),
-                ]
-                resolved = next((p for p in candidate_paths if p.exists()), None)
-                if resolved is not None:
-                    self._path = resolved
-                if not self._path.exists():
-                    raise VideoSourceError(f"Uploaded video not found: {self._path}")
-                cap = cv2.VideoCapture(str(self._path))
-                if not cap.isOpened():
-                    raise VideoSourceError(f"Could not decode video file: {self._path}")
-                self._cap = cap
-                self._fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
-                self._width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                self._height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
+                self._open_locked()
             ok, frame = self._cap.read()
             if not ok:
-                # Seamless loop: rewind back to frame 0
                 self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 ok, frame = self._cap.read()
                 if not ok:
-                    raise VideoSourceError("End of video file reached")
+                    raise VideoSourceError("Video cannot produce a frame")
             self._frame_index += 1
-            return VideoFrame(
-                image=frame,
-                frame_index=self._frame_index,
-                timestamp=self._frame_index / self._fps if self._fps else time.time(),
-                source_kind=SourceKind.UPLOADED_FILE,
-                source_label=str(self._path.name),
-                fps=self._fps,
-                width=self._width,
-                height=self._height,
-            )
+            return VideoFrame(frame, self._frame_index, time.time(), SourceKind.UPLOADED_FILE,
+                              self._path.name, self._fps, self._width, self._height)
 
     def close(self) -> None:
         with self._lock:
@@ -264,58 +225,28 @@ class RTSPVideoSource(BaseVideoSource):
 
 
 class SimulationVideoSource(BaseVideoSource):
-    """Wraps the same file-based decoding as UploadedVideoSource but labels
-    every frame SourceKind.SIMULATION, and gracefully falls back to synthetic
-    frames if no physical video file is available on disk."""
+    """Explicit synthetic camera for simulation; never a fallback for real inputs."""
 
-    def __init__(self, file_path: str):
-        self._delegate = UploadedVideoSource(file_path)
-        self._synthetic_frame_index = 0
+    def __init__(self, direction: str, width: int = 640, height: int = 360):
+        self.direction = direction
+        self.width, self.height = width, height
+        self._frame_index = 0
+        self._opened = False
 
     def open(self) -> None:
-        try:
-            self._delegate.open()
-        except Exception:
-            pass
+        self._opened = True
 
     def is_open(self) -> bool:
-        return True
+        return self._opened
 
     def read(self) -> VideoFrame:
-        try:
-            frame = self._delegate.read()
-            return VideoFrame(
-                image=frame.image,
-                frame_index=frame.frame_index,
-                timestamp=frame.timestamp,
-                source_kind=SourceKind.SIMULATION,
-                source_label=frame.source_label,
-                fps=frame.fps,
-                width=frame.width,
-                height=frame.height,
-            )
-        except Exception:
-            import cv2
-            self._synthetic_frame_index += 1
-            w, h = 1280, 720
-            canvas = np.full((h, w, 3), (38, 40, 44), dtype=np.uint8)
-            cv2.rectangle(canvas, (0, int(h * 0.25)), (w, int(h * 0.75)), (52, 54, 60), -1)
-            cv2.rectangle(canvas, (int(w * 0.25), 0), (int(w * 0.75), h), (52, 54, 60), -1)
-            cv2.line(canvas, (0, h // 2), (w, h // 2), (200, 200, 200), 2)
-            cv2.line(canvas, (w // 2, 0), (w // 2, h), (200, 200, 200), 2)
-            return VideoFrame(
-                image=canvas,
-                frame_index=self._synthetic_frame_index,
-                timestamp=time.time(),
-                source_kind=SourceKind.SIMULATION,
-                source_label="synthetic_fallback",
-                fps=25.0,
-                width=w,
-                height=h,
-            )
+        import cv2
+        self._frame_index += 1
+        canvas = np.full((self.height, self.width, 3), (38, 40, 44), dtype=np.uint8)
+        cv2.putText(canvas, f"SIMULATION: {self.direction}", (16, 28),
+                    cv2.FONT_HERSHEY_SIMPLEX, .6, (220, 220, 220), 1)
+        return VideoFrame(canvas, self._frame_index, time.time(), SourceKind.SIMULATION,
+                          self.direction, 25.0, self.width, self.height)
 
     def close(self) -> None:
-        try:
-            self._delegate.close()
-        except Exception:
-            pass
+        self._opened = False

@@ -64,9 +64,7 @@ export default function TrafficClassifierPage() {
       .then((data) => {
         setQuadPresets(data);
         if (data.length > 0 && !quadResult) {
-          // Auto-run 123.mp4 quad extraction or asymmetric rush hour preset on initial mount
-          const droneQuad = data.find((p) => p.id === "preset_quad_123_drone");
-          handleSelectQuadPreset(droneQuad ? droneQuad.id : data[0].id);
+          handleSelectQuadPreset(data[0].id);
         }
       })
       .catch(() => {
@@ -98,13 +96,6 @@ export default function TrafficClassifierPage() {
             description: "Evenly distributed light-to-moderate volume (2-4 vehicles per approach, 25% density).",
             expected_state: "BALANCED_MODERATE",
             icon: "🟢",
-          },
-          {
-            id: "preset_quad_123_drone",
-            title: "123.mp4 Aerial 4-Way Approach Extraction",
-            description: "Real quad approach extraction from 123.mp4: West corridor queue vs North, South, East approaches.",
-            expected_state: "ASYMMETRIC_BOTTLENECK",
-            icon: "🚁",
           },
         ]);
       });

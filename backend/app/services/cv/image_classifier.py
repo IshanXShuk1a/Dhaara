@@ -2,8 +2,7 @@
 DHAARA AI Traffic Image & Video Classifier Service
 
 Accepts any input image or video file (e.g. 123.mp4, CCTV feeds, camera snapshots),
-performs multi-approach vehicle detection, top-down drone aerial sensitivity analysis,
-lane-by-lane queue estimation, and classifies overall traffic state (Free Flow, Moderate, Heavy, Gridlock, Emergency).
+classifies the supplied camera image or video as an offline diagnostic (Free Flow, Moderate, Heavy, Gridlock, Emergency).
 Produces rich annotated visualization images with tactical HUD metrics.
 """
 from __future__ import annotations
@@ -37,19 +36,8 @@ class TrafficImageClassifier:
 
     def __init__(self):
         self._ambulance_detector = AmbulanceDetector(confidence_threshold=0.55)
-        self._yolo_model = None
-        self._init_yolo()
-
-    def _init_yolo(self) -> None:
-        """Attempt to load ultralytics YOLO if available."""
-        try:
-            from ultralytics import YOLO  # type: ignore
-            if os.path.exists("./models_store/yolov8n.pt"):
-                self._yolo_model = YOLO("./models_store/yolov8n.pt")
-            else:
-                self._yolo_model = YOLO("yolov8n.pt")
-        except Exception:
-            self._yolo_model = None
+        from app.services.cv.detector import YOLODetector
+        self._shared_detector = YOLODetector()
 
     def classify_image(self, image_bytes: bytes, filename: str = "image.jpg") -> dict[str, Any]:
         """Classify traffic from raw image bytes and return annotations + metrics."""
@@ -64,7 +52,7 @@ class TrafficImageClassifier:
 
     def classify_video_file(self, video_path: str, filename: str = "123.mp4") -> dict[str, Any]:
         """Classify an entire video (like 123.mp4), sampling frames across duration,
-        computing per-approach metrics, and generating keyframe annotations."""
+        generating keyframe annotations for that camera only."""
         start_time = time.perf_counter()
 
         if not os.path.exists(video_path):
@@ -97,9 +85,6 @@ class TrafficImageClassifier:
         max_vehicle_count = 0
         all_counts: list[int] = []
 
-        # Track approach queues across samples
-        approach_queues = {"WEST": 0, "EAST": 0, "NORTH": 0, "SOUTH": 0}
-
         for idx in sample_indices:
             cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
             ret, frame = cap.read()
@@ -109,22 +94,6 @@ class TrafficImageClassifier:
             dets = self._run_detection(frame)
             veh_count = sum(1 for d in dets if d["class"] in ("car", "motorcycle", "bus", "truck", "ambulance"))
             all_counts.append(veh_count)
-
-            # Accumulate per-direction queue
-            cx, cy = width / 2.0, height / 2.0
-            for d in dets:
-                bx1, by1, bx2, by2 = d["bbox"]
-                bx_center = (bx1 + bx2) / 2.0
-                by_center = (by1 + by2) / 2.0
-                dx = bx_center - cx
-                dy = by_center - cy
-
-                if abs(dx) > abs(dy):
-                    direction = "EAST" if dx > 0 else "WEST"
-                else:
-                    direction = "SOUTH" if dy > 0 else "NORTH"
-
-                approach_queues[direction] = max(approach_queues[direction], approach_queues.get(direction, 0) + 1)
 
             if veh_count >= max_vehicle_count or best_frame is None:
                 max_vehicle_count = veh_count
@@ -139,55 +108,9 @@ class TrafficImageClassifier:
         # Run full analysis on best representative frame
         res = self._classify_cv_frame(best_frame, filename, start_time, precomputed_detections=max_detections)
 
-        # Dynamically compute per-approach vehicle counts and queue estimations from actual frame detections
-        cx, cy = width / 2.0, height / 2.0
-        approach_veh_counts = {"NORTH": 0, "SOUTH": 0, "EAST": 0, "WEST": 0}
-        for d in max_detections:
-            bx1, by1, bx2, by2 = d["bbox"]
-            bx_center = (bx1 + bx2) / 2.0
-            by_center = (by1 + by2) / 2.0
-            dx = bx_center - cx
-            dy = by_center - cy
-
-            if abs(dx) > abs(dy):
-                direction = "EAST" if dx > 0 else "WEST"
-            else:
-                direction = "SOUTH" if dy > 0 else "NORTH"
-
-            approach_veh_counts[direction] += 1
-
-        # Enhance summary with multi-approach video analysis
-        res["video_metadata"] = {
-            "duration_s": round(duration_s, 2),
-            "total_frames": total_frames,
-            "fps": round(fps, 1),
-            "width": width,
-            "height": height,
-            "sampled_frames": len(sample_indices),
-            "approach_queues": approach_veh_counts,
-        }
-
-        # Calculate approach breakdown and intelligent queue management
-        res["classification"]["approach_breakdown"] = {
-            d: {
-                "queue_length_m": approach_veh_counts[d] * 6,
-                "status": "CONGESTED" if approach_veh_counts[d] >= 7 else ("HEAVY" if approach_veh_counts[d] >= 4 else ("MODERATE" if approach_veh_counts[d] >= 2 else "FREE")),
-                "vehicles": approach_veh_counts[d],
-            }
-            for d in ("WEST", "EAST", "SOUTH", "NORTH")
-        }
-
-        dominant_dir = max(approach_veh_counts, key=approach_veh_counts.get)
-        dominant_cnt = approach_veh_counts[dominant_dir]
-        if dominant_cnt > 0:
-            rec_green = max(20, min(65, int(15 + dominant_cnt * 3.5)))
-            res["classification"]["recommended_green_s"] = rec_green
-            res["classification"]["ai_reasoning"] = (
-                f"Multi-approach analysis confirms high-volume intersection flow with highest vehicle queue on the {dominant_dir} corridor "
-                f"({dominant_cnt} vehicles queued). Total intersection load: {res['classification']['total_vehicles']} vehicles, "
-                f"{res['classification']['density_percentage']}% PCU density. "
-                f"Recommendation: Grant {rec_green}s green split to the {dominant_dir} corridor to flush the standing queue before cycle rollover."
-            )
+        res["video_metadata"] = {"duration_s": round(duration_s, 2), "total_frames": total_frames,
+                                 "fps": round(fps, 1), "width": width, "height": height,
+                                 "sampled_frames": len(sample_indices), "approach_queues": {}}
 
         return res
 
@@ -365,12 +288,14 @@ class TrafficImageClassifier:
         """Run YOLO if loaded; otherwise run standalone OpenCV vehicle detector."""
         detections: list[dict[str, Any]] = []
 
-        if self._yolo_model is not None:
+        if self._shared_detector is not None:
             try:
                 # High-resolution inference preserving small drone and aerial vehicles (up to 1280px)
                 max_dim = max(img.shape[:2])
                 img_size = min(1280, max(640, (max_dim // 32) * 32))
-                results = self._yolo_model.predict(img, conf=0.18, iou=0.40, imgsz=img_size, verbose=False)
+                with self._shared_detector._lock:
+                    self._shared_detector._load_model()
+                    results = self._shared_detector._model.predict(img, conf=0.18, iou=0.40, imgsz=img_size, verbose=False)
                 for r in results:
                     names = r.names
                     for box in r.boxes:

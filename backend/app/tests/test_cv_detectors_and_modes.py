@@ -23,7 +23,7 @@ class TestAmbulanceDetector(unittest.TestCase):
     def test_dark_car_is_not_ambulance(self):
         # A dark grey/black car image (H, W, 3)
         image = np.full((120, 100, 3), (30, 30, 30), dtype=np.uint8)
-        is_amb, conf = self.detector.classify(image, "car")
+        is_amb, conf = self.detector.is_ambulance(image, (0, 0, 100, 120), "car")
         self.assertFalse(is_amb)
         self.assertLess(conf, 0.4)
 
@@ -36,7 +36,7 @@ class TestAmbulanceDetector(unittest.TestCase):
         image[40:80, 45:55] = (20, 20, 220)
         # Top roof beacon
         image[5:15, 40:60] = (255, 255, 255)
-        is_amb, conf = self.detector.classify(image, "truck")
+        is_amb, conf = self.detector.is_ambulance(image, (0, 0, 100, 120), "truck")
         self.assertTrue(is_amb)
         self.assertGreater(conf, 0.5)
 
@@ -47,13 +47,13 @@ class TestHelmetDetector(unittest.TestCase):
 
     def test_invalid_or_tiny_crop_returns_unknown(self):
         tiny = np.zeros((3, 3, 3), dtype=np.uint8)
-        state, conf = self.detector.classify_head(tiny)
+        state, conf = self.detector.evaluate(tiny, (0, 0, 3, 3))
         self.assertEqual(state, HelmetState.UNKNOWN)
 
     def test_colored_helmet_head_crop(self):
         # Head crop wearing a bright protective white/yellow helmet (low skin HSV, high helmet color)
         head_crop = np.full((40, 40, 3), (0, 220, 255), dtype=np.uint8)  # yellow helmet
-        state, conf = self.detector.classify_head(head_crop)
+        state, conf = self.detector.evaluate(head_crop, (0, 0, 40, 40))
         self.assertIn(state, (HelmetState.HELMET, HelmetState.UNKNOWN))
 
 
@@ -65,11 +65,11 @@ class TestIntersectionControllerModes(unittest.TestCase):
         ]
         provider = ScenarioProvider()
         detector = SimulationDetector(provider)
-        config = DomainConfig(signal_timings=SignalTimings(minimum_green_s=2, maximum_green_s=10, yellow_s=1, all_red_s=1))
+        config = DomainConfig(signal_timings=SignalTimings(fixed_phase_s=2))
         return IntersectionController(
             intersection_id="TEST-INT-01",
-            lanes=lanes,
-            directions=["NORTH", "SOUTH"],
+            lanes=lanes + [LanePolygon(d,d,[(0,0),(10,0),(10,10),(0,10)]) for d in ["EAST","WEST"]],
+            directions=["EAST", "WEST", "NORTH", "SOUTH"],
             detector=detector,
             config=config,
             fps=10.0,
@@ -83,11 +83,16 @@ class TestIntersectionControllerModes(unittest.TestCase):
         c = self._make_controller()
         c.set_signal_mode(SignalMode.MANUAL, target_direction="NORTH")
         self.assertEqual(c.signal_mode, SignalMode.MANUAL)
-        self.assertEqual(c.signal_target_direction, "NORTH")
+        self.assertEqual(c.signal_target_direction, "NS")
         # In MANUAL mode, active direction remains held
         dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
         snap = c.process_frame(dummy_frame, frame_index=1, dt_seconds=0.1)
-        self.assertEqual(snap.signal_active_direction, "NORTH")
+        self.assertEqual(snap.signal_state, "YELLOW")
+        self.assertEqual(snap.signal_target_direction, "NS")
+        self.assertEqual(snap.decision.mode, "MANUAL")
+        snap = c.process_frame(dummy_frame, frame_index=2, dt_seconds=3)
+        self.assertEqual(snap.signal_active_direction, "NS")
+        self.assertEqual(snap.signal_state, "GREEN")
 
     def test_fixed_mode_cycles(self):
         c = self._make_controller()
@@ -108,7 +113,7 @@ class TestIntersectionControllerModes(unittest.TestCase):
             self.assertGreaterEqual(m.traffic_pressure, 0.0)
             self.assertLessEqual(m.traffic_pressure, 100.0)
         # Verify green allotment state exists
-        self.assertIn(snap.signal_active_direction, ("NORTH", "SOUTH"))
+        self.assertIn(snap.signal_active_direction, ("EW", "NS"))
 
 
 if __name__ == "__main__":

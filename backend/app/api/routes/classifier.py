@@ -168,49 +168,12 @@ def get_quad_classifier_presets():
             "expected_state": "BALANCED_MODERATE",
             "icon": "🟢",
         },
-        {
-            "id": "preset_quad_123_drone",
-            "title": "123.mp4 Aerial 4-Way Approach Extraction",
-            "description": "Real quad approach extraction from 123.mp4: West corridor queue vs North, South, East approaches.",
-            "expected_state": "ASYMMETRIC_BOTTLENECK",
-            "icon": "🚁",
-        },
     ]
 
 
 @router.post("/classify-quad-preset/{preset_id}")
 def classify_quad_preset(preset_id: str):
     """Run comparative 4-image classification on a preset scenario."""
-    if preset_id == "preset_quad_123_drone":
-        candidate_paths = [
-            "./videos/123.mp4",
-            "backend/videos/123.mp4",
-            "../videos/123.mp4",
-            "C:/Users/ishan/Downloads/code/backend/videos/123.mp4",
-        ]
-        vid_path = next((p for p in candidate_paths if os.path.exists(p)), None)
-        if vid_path:
-            cap = cv2.VideoCapture(vid_path)
-            if cap.isOpened():
-                tot = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                cap.set(cv2.CAP_PROP_POS_FRAMES, int(tot * 0.35))
-                ok, frame = cap.read()
-                cap.release()
-                if ok and frame is not None:
-                    h, w = frame.shape[:2]
-                    app1 = cv2.resize(frame[0:int(h * 0.55), int(w * 0.25):int(w * 0.75)], (640, 360))
-                    app2 = cv2.resize(frame[int(h * 0.45):h, int(w * 0.25):int(w * 0.75)], (640, 360))
-                    app3 = cv2.resize(frame[int(h * 0.25):int(h * 0.75), int(w * 0.5):w], (640, 360))
-                    app4 = cv2.resize(frame[int(h * 0.25):int(h * 0.75), 0:int(w * 0.55)], (640, 360))
-
-                    items = [
-                        {"image": app1, "label": "Approach 1 (North)", "filename": "123_north.jpg"},
-                        {"image": app2, "label": "Approach 2 (South)", "filename": "123_south.jpg"},
-                        {"image": app3, "label": "Approach 3 (East)", "filename": "123_east.jpg"},
-                        {"image": app4, "label": "Approach 4 (West - Queue)", "filename": "123_west_queue.jpg"},
-                    ]
-                    return classifier_service.classify_quad_images(items)
-
     scenario_configs = {
         "preset_quad_asymmetric": [
             ("gridlock", "Approach 1 (North)"),

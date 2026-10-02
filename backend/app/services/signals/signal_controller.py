@@ -1,25 +1,9 @@
-"""
-SignalControllerInterface
-
-Separates "what should happen" (SignalFSM's safe state transitions, driven
-by TrafficDecisionEngine) from "how the physical/simulated lights actually
-get set". This is the abstraction the spec requires so DHAARA is
-technically defensible for real hardware deployment: the demo runs
-`SimulationSignalController`, and a certified-hardware deployment would
-implement `HardwareSignalControllerInterface.apply_state` against its own
-controller's protocol (serial, Modbus, a vendor API, etc.) without any of
-the FSM/decision code changing.
-
-DHAARA does not claim to drive real traffic lights unless a concrete
-`HardwareSignalController` subclass has actually been wired to certified
-hardware - `SimulationSignalController` is used by default everywhere in
-this repository.
-"""
+"""Existing simulated and hardware signal output abstractions."""
 from __future__ import annotations
 
 from typing import Protocol
 
-from app.services.signals.signal_fsm import SignalState
+from app.services.signals.signal_fsm import SignalState, SignalMode
 
 
 class SignalHardwareError(Exception):

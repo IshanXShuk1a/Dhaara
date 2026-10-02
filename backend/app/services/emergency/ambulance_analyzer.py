@@ -1,11 +1,9 @@
 """
 AmbulanceAnalyzer
 
-Bridges raw "ambulance"-class tracks (from Detector/Tracker) into
-AmbulanceConfirmationTracker observations. Determines `approaching` from the
-track's actual motion vector relative to the intersection center - a vehicle
-classified "ambulance" that is moving away from the intersection is not
-treated as an approach candidate, regardless of confidence.
+Bridges ambulance-class tracks into temporal identity confirmation. Camera
+ownership supplies the direction, including for stopped ambulances. Flashing
+light evidence is checked separately by the intersection controller.
 """
 from __future__ import annotations
 
@@ -49,7 +47,7 @@ class AmbulanceAnalyzer:
         observation = AmbulanceObservation(
             track_id=track.track_id,
             confidence=track.confidence,
-            approaching=self.is_approaching(track),
+            approaching=lane_assignment.direction is not None,  # includes ambulances stopped at red
             lane_id=lane_assignment.lane_id,
             direction=lane_assignment.direction,
             timestamp=timestamp,

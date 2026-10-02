@@ -1,132 +1,96 @@
-"""
-TrafficDecisionEngine
-
-Selects which direction should receive the next GREEN phase and for how
-long, from real LaneMetrics (see services/lanes/lane_intelligence.py) plus
-fairness state. Produces a `SignalDecision` with a human-readable, itemized
-`reason` list built from the actual numbers that drove the choice - the
-frontend must display this verbatim rather than inventing its own
-explanation (see PROJECT rules: "Do not generate explanations independently
-in the frontend").
-
-Emergency state is an input, not computed here: if `emergency_direction` is
-set, the engine returns that direction unconditionally (fairness does not
-apply to emergency priority), with the reason clearly marked EMERGENCY.
-"""
+"""Weighted pair demand with timed alternation and persistent empty-phase release."""
 from __future__ import annotations
-
-from dataclasses import dataclass
-
-from app.core.domain_config import DomainConfig, SignalTimings, DEFAULT_CONFIG
-from app.services.decision.fairness import FairnessTracker
-from app.services.lanes.lane_intelligence import LaneMetrics, LaneStatus
-
+from dataclasses import dataclass, field
+from app.core.domain_config import DomainConfig, DEFAULT_CONFIG
+from app.services.lanes.lane_intelligence import LaneMetrics
+from app.services.signals.signal_fsm import PHASE_DIRECTIONS, phase_for, opposite_phase
 
 @dataclass(frozen=True)
 class SignalDecision:
     selected_direction: str
     green_duration_s: int
     reason: list[str]
-    mode: str  # "ADAPTIVE" | "EMERGENCY" | "FIXED"
-    traffic_pressure: float
-    queue_length_m: float
-    waiting_time_s: float
-    vehicle_count: int
-    fairness_applied: bool
-
-
-def _clamp(v: float, lo: float, hi: float) -> float:
-    return max(lo, min(hi, v))
-
+    mode: str
+    traffic_pressure: float = 0.0
+    queue_length_m: float = 0.0
+    waiting_time_s: float = 0.0
+    vehicle_count: int = 0
+    fairness_applied: bool = False
+    pair_scores: dict[str, float | None] = field(default_factory=dict)
+    denser_pair: str | None = None
+    score_difference: float | None = None
+    action: str = "HOLD"
+    empty_elapsed_s: float = 0.0
 
 class TrafficDecisionEngine:
-    def __init__(self, fairness: FairnessTracker, config: DomainConfig = DEFAULT_CONFIG):
-        self._fairness = fairness
-        self._timings: SignalTimings = config.signal_timings
+    def __init__(self, config: DomainConfig = DEFAULT_CONFIG):
+        self._timings = config.signal_timings
+        self._low_since: float | None = None
+        self._observed_phase: str | None = None
+        self._last_elapsed = 0.0
+        self._initial_evaluated = False
 
-    def decide(
-        self,
-        lane_metrics_by_direction: dict[str, LaneMetrics],
-        current_direction: str,
-        emergency_direction: str | None = None,
-    ) -> SignalDecision:
+    def decide(self, lane_metrics_by_direction: dict[str, LaneMetrics], current_direction: str,
+               emergency_direction: str | None = None, *, elapsed_s: float = 0.0,
+               data_complete: bool = True, full_phase_required: bool = False,
+               adaptive: bool = True, emergency_lights_active: bool = False,
+               transition_target: str | None = None) -> SignalDecision:
         if not lane_metrics_by_direction:
             raise ValueError("No lane metrics supplied to decision engine")
-
-        if emergency_direction is not None:
-            metrics = lane_metrics_by_direction.get(emergency_direction)
-            green = self._timings.maximum_green_s if metrics is None else self._green_duration(metrics)
-            decision = SignalDecision(
-                selected_direction=emergency_direction,
-                green_duration_s=green,
-                reason=[f"EMERGENCY: priority requested for {emergency_direction}"],
-                mode="EMERGENCY",
-                traffic_pressure=metrics.traffic_pressure if metrics else 0.0,
-                queue_length_m=metrics.queue_length_m if metrics else 0.0,
-                waiting_time_s=metrics.average_waiting_time_s if metrics else 0.0,
-                vehicle_count=metrics.vehicle_count if metrics else 0,
-                fairness_applied=False,
-            )
-            # Emergency selection does not count against fairness.
-            return decision
-
-        # Rank candidates by traffic pressure, descending, filtering out
-        # directions that have exhausted their fairness allowance (unless
-        # every candidate has, in which case fairness cannot starve the
-        # intersection entirely and the pressure ranking is used as-is).
-        ranked = sorted(
-            lane_metrics_by_direction.items(), key=lambda kv: kv[1].traffic_pressure, reverse=True
-        )
-        eligible = [(d, m) for d, m in ranked if self._fairness.is_eligible(d)]
-        fairness_applied = len(eligible) < len(ranked)
-        candidates = eligible if eligible else ranked
-
-        selected_direction, metrics = candidates[0]
-        green = self._green_duration(metrics)
-        reason = self._build_reason(selected_direction, metrics, ranked, fairness_applied)
-
-        self._fairness.record_selection(selected_direction)
-
-        return SignalDecision(
-            selected_direction=selected_direction,
-            green_duration_s=green,
-            reason=reason,
-            mode="ADAPTIVE",
-            traffic_pressure=metrics.traffic_pressure,
-            queue_length_m=metrics.queue_length_m,
-            waiting_time_s=metrics.average_waiting_time_s,
-            vehicle_count=metrics.vehicle_count,
-            fairness_applied=fairness_applied,
-        )
-
-    def _green_duration(self, metrics: LaneMetrics) -> int:
-        """green = clamp(base_green + pressure_factor, minimum_green, maximum_green)."""
-        pressure_factor = (metrics.traffic_pressure / 100.0) * (
-            self._timings.maximum_green_s - self._timings.base_green_s
-        )
-        duration = self._timings.base_green_s + pressure_factor
-        return int(round(_clamp(duration, self._timings.minimum_green_s, self._timings.maximum_green_s)))
-
-    @staticmethod
-    def _build_reason(
-        selected: str,
-        metrics: LaneMetrics,
-        ranked: list[tuple[str, LaneMetrics]],
-        fairness_applied: bool,
-    ) -> list[str]:
-        reasons: list[str] = []
-        if len(ranked) > 1 and ranked[0][0] == selected:
-            reasons.append(f"Highest traffic pressure ({metrics.traffic_pressure:.0f})")
-        elif fairness_applied:
-            reasons.append(
-                f"Highest-pressure direction is at its fairness limit; "
-                f"selected next highest ({metrics.traffic_pressure:.0f})"
-            )
-        if metrics.queue_length_m > 0:
-            reasons.append(f"Queue length {metrics.queue_length_m:.0f}m")
-        if metrics.average_waiting_time_s > 0:
-            reasons.append(f"Average waiting time {metrics.average_waiting_time_s:.0f}s")
-        reasons.append(f"{metrics.vehicle_count} vehicles, status {metrics.status.value}")
-        if fairness_applied:
-            reasons.append("Fairness limit applied to at least one higher-pressure direction")
-        return reasons
+        current = phase_for(current_direction)
+        other = opposite_phase(current)
+        complete = data_complete and all(d in lane_metrics_by_direction for ds in PHASE_DIRECTIONS.values() for d in ds)
+        scores = {pair: round(sum(lane_metrics_by_direction[d].vehicle_score for d in ds) / 2, 2)
+                  if complete else None for pair, ds in PHASE_DIRECTIONS.items()}
+        difference = abs(scores["EW"] - scores["NS"]) if complete else None
+        denser = ("EW" if scores["EW"] > scores["NS"] else "NS" if scores["NS"] > scores["EW"] else "BALANCED") if complete else None
+        if transition_target is not None:
+            target = phase_for(transition_target)
+            self._low_since, self._observed_phase = None, None
+            count = sum(lane_metrics_by_direction[d].vehicle_count for d in PHASE_DIRECTIONS[target] if d in lane_metrics_by_direction)
+            return SignalDecision(target, self._timings.fixed_phase_s,
+                                  [f"{current} YELLOW; {target} GREEN only after yellow completes"],
+                                  "ADAPTIVE" if adaptive else "FIXED", vehicle_count=count, pair_scores=scores,
+                                  denser_pair=denser, score_difference=difference, action="YELLOW")
+        if current != self._observed_phase or elapsed_s < self._last_elapsed:
+            self._low_since = None
+        self._observed_phase, self._last_elapsed = current, elapsed_s
+        low = complete and scores[current] <= self._timings.empty_score_max
+        if not low:
+            self._low_since = None
+        elif self._low_since is None:
+            self._low_since = elapsed_s
+        low_duration = max(0.0, elapsed_s - self._low_since) if self._low_since is not None else 0.0
+        initial_selection = adaptive and complete and not self._initial_evaluated and elapsed_s <= 1.0
+        if complete:
+            self._initial_evaluated = True
+        selected, action = current, "HOLD"
+        reasons = [f"{current} keeps its {self._timings.fixed_phase_s}-second phase"]
+        if emergency_direction and emergency_lights_active:
+            selected, action = phase_for(emergency_direction), "EMERGENCY"
+            reasons = [f"Ambulance and flashing emergency lights confirmed in {emergency_direction}"]
+        elif initial_selection and scores[other] - scores[current] >= self._timings.score_difference_threshold:
+            selected, action = other, "INITIAL"
+            reasons = [f"Initial demand: {other} leads by {scores[other] - scores[current]:g} points"]
+        elif elapsed_s >= self._timings.fixed_phase_s:
+            selected, action = other, "TIMER"
+            reasons = [f"{self._timings.fixed_phase_s}-second timer elapsed; alternate to {other}"]
+        elif (adaptive and not full_phase_required and complete and low
+              and low_duration >= self._timings.empty_persistence_s
+              and self._timings.fixed_phase_s - elapsed_s > self._timings.early_switch_min_remaining_s
+              and scores[other] - scores[current] >= self._timings.score_difference_threshold):
+            selected, action = other, "EARLY"
+            reasons = [f"{current} score {scores[current]:g} stayed <= {self._timings.empty_score_max:g} for {low_duration:.1f}s",
+                       f"{other} leads by {scores[other] - scores[current]:g} points; more than {self._timings.early_switch_min_remaining_s:g}s remain",
+                       f"{other} receives a full {self._timings.fixed_phase_s}-second phase"]
+        elif not complete:
+            reasons.append("Camera data incomplete; demand switching disabled")
+        elif full_phase_required:
+            reasons.append("Completing the full phase granted after early switching")
+        elif denser != "BALANCED":
+            reasons.append(f"{denser} is denser; timed alternation prevents repeated grants")
+        count = sum(lane_metrics_by_direction[d].vehicle_count for d in PHASE_DIRECTIONS[selected] if d in lane_metrics_by_direction)
+        return SignalDecision(selected, self._timings.fixed_phase_s, reasons, "ADAPTIVE" if adaptive else "FIXED",
+                              vehicle_count=count, pair_scores=scores, denser_pair=denser,
+                              score_difference=round(difference, 2) if difference is not None else None,
+                              action=action, empty_elapsed_s=round(low_duration, 1))

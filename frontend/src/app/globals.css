@@ -2,56 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
-
-/* ========================================================================= */
-/* 1. COLOR FOUNDATION & DESIGN TOKENS (Command Center Palette)              */
-/* ========================================================================= */
-
 :root,
 html.dark {
   color-scheme: dark;
-
-  /* Base Command Center Foundation */
-  --background: #070B0D;
-  --background-rgb: 7 11 13;
-  --background-secondary: #0A1012;
-  --background-secondary-rgb: 10 16 18;
-
-  --surface: #0D1517;
-  --surface-rgb: 13 21 23;
-  --surface-elevated: #111B1D;
-  --surface-elevated-rgb: 17 27 29;
-
-  --border: rgba(255, 255, 255, 0.07);
-  --border-rgb: 255 255 255;
-
-  /* Restrained ITS Accent */
-  --accent: #37D6B0;
-  --accent-rgb: 55 214 176;
-
-  /* Supporting Telemetry & State Colors */
-  --success: #42D392;
-  --success-rgb: 66 211 146;
-  --warning: #E8B84A;
-  --warning-rgb: 232 184 74;
-  --danger: #EF6262;
-  --danger-rgb: 239 98 98;
-  --info: #5EA7FF;
-  --info-rgb: 94 167 255;
-
-  /* High-Legibility Typography Hierarchy */
-  --text-primary: #EDF2F4;
-  --text-primary-rgb: 237 242 244;
-  --text-secondary: #8E9BA4;
-  --text-secondary-rgb: 142 155 164;
-  --text-muted: #56646E;
-  --text-muted-rgb: 86 100 110;
-
-  /* Soft Ambient Shadows */
-  --shadow-cockpit: 0 28px 72px -16px rgba(0, 0, 0, 0.8), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
-
-  /* Backward Compatibility Aliases */
+  --background: #0b1220;
+  --background-rgb: 11 18 32;
+  --background-secondary: #101a2a;
+  --background-secondary-rgb: 16 26 42;
+  --surface: #152035;
+  --surface-rgb: 21 32 53;
+  --surface-elevated: #1b2940;
+  --surface-elevated-rgb: 27 41 64;
+  --border: rgba(155, 180, 217, 0.18);
+  --border-rgb: 155 180 217;
+  --accent: #83b4ff;
+  --accent-rgb: 131 180 255;
+  --success: #4bd4a0;
+  --success-rgb: 75 212 160;
+  --warning: #f8c86b;
+  --warning-rgb: 248 200 107;
+  --danger: #fa8590;
+  --danger-rgb: 250 133 144;
+  --info: #8db9ff;
+  --info-rgb: 141 185 255;
+  --text-primary: #eef3ff;
+  --text-primary-rgb: 238 243 255;
+  --text-secondary: #b5c2d6;
+  --text-secondary-rgb: 181 194 214;
+  --text-muted: #93a3be;
+  --text-muted-rgb: 147 163 190;
+  --shadow-cockpit: 0 8px 24px rgba(2, 8, 20, 0.18);
   --color-canvas-solid: var(--background);
   --color-canvas-solid-rgb: var(--background-rgb);
   --color-cockpit-bg: var(--surface);
@@ -80,453 +60,95 @@ html.dark {
 
 html.light {
   color-scheme: light;
-
-  --background: #F2F5F7;
-  --background-rgb: 242 245 247;
-  --background-secondary: #E7ECEF;
-  --background-secondary-rgb: 231 236 239;
-
-  --surface: #FFFFFF;
+  --background: #eef3f9;
+  --background-rgb: 238 243 249;
+  --background-secondary: #f8fafd;
+  --background-secondary-rgb: 248 250 253;
+  --surface: #ffffff;
   --surface-rgb: 255 255 255;
-  --surface-elevated: #F8FAFB;
-  --surface-elevated-rgb: 248 250 251;
-
-  --border: rgba(0, 0, 0, 0.08);
-  --border-rgb: 0 0 0;
-
-  --accent: #19A784;
-  --accent-rgb: 25 167 132;
-
-  --success: #26A66E;
-  --success-rgb: 38 166 110;
-  --warning: #C49226;
-  --warning-rgb: 196 146 38;
-  --danger: #D94545;
-  --danger-rgb: 217 69 69;
-  --info: #3385E8;
-  --info-rgb: 51 133 232;
-
-  --text-primary: #10171B;
-  --text-primary-rgb: 16 23 27;
-  --text-secondary: #4C5963;
-  --text-secondary-rgb: 76 89 99;
-  --text-muted: #7A8994;
-  --text-muted-rgb: 122 137 148;
-
-  --shadow-cockpit: 0 20px 50px -10px rgba(15, 23, 42, 0.08), inset 0 1px 0 0 rgba(255, 255, 255, 1);
-
-  --color-canvas-solid: var(--background);
-  --color-canvas-solid-rgb: var(--background-rgb);
-  --color-cockpit-bg: var(--surface);
-  --color-cockpit-bg-rgb: var(--surface-rgb);
-  --color-cockpit-border: var(--border);
-  --color-cockpit-shadow: var(--shadow-cockpit);
-  --color-card-bg: var(--surface);
-  --color-card-bg-rgb: var(--surface-rgb);
-  --color-card-hover: var(--surface-elevated);
-  --color-card-hover-rgb: var(--surface-elevated-rgb);
-  --color-card-border: var(--border);
-  --color-pill-bg: var(--surface-elevated);
-  --color-pill-bg-rgb: var(--surface-elevated-rgb);
-  --color-pill-border: var(--border);
-  --color-text-primary: var(--text-primary);
-  --color-text-primary-rgb: var(--text-primary-rgb);
-  --color-text-secondary: var(--text-secondary);
-  --color-text-secondary-rgb: var(--text-secondary-rgb);
-  --color-text-muted: var(--text-muted);
-  --color-text-muted-rgb: var(--text-muted-rgb);
-  --color-surface-raised: var(--surface);
-  --color-surface-raised-rgb: var(--surface-rgb);
-  --color-surface-panel: var(--background-secondary);
-  --color-surface-panel-rgb: var(--background-secondary-rgb);
+  --surface-elevated: #f2f6fc;
+  --surface-elevated-rgb: 242 246 252;
+  --border: rgba(77, 107, 148, 0.22);
+  --border-rgb: 77 107 148;
+  --accent: #245bbb;
+  --accent-rgb: 36 91 187;
+  --success: #097954;
+  --success-rgb: 9 121 84;
+  --warning: #986200;
+  --warning-rgb: 152 98 0;
+  --danger: #c23447;
+  --danger-rgb: 194 52 71;
+  --info: #245bbb;
+  --info-rgb: 36 91 187;
+  --text-primary: #13243b;
+  --text-primary-rgb: 19 36 59;
+  --text-secondary: #486080;
+  --text-secondary-rgb: 72 96 128;
+  --text-muted: #596d88;
+  --text-muted-rgb: 89 109 136;
+  --shadow-cockpit: 0 6px 20px rgba(38, 59, 91, 0.05);
 }
-
-/* ========================================================================= */
-/* 2. BACKGROUND ATMOSPHERE & SUBTLE GRID                                    */
-/* ========================================================================= */
 
 html {
   min-height: 100%;
-  background-color: var(--background);
+  background: var(--background);
 }
 
 body {
-  background-color: var(--background);
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.016) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.016) 1px, transparent 1px),
-    radial-gradient(circle at 15% 20%, rgba(55, 214, 176, 0.045), transparent 35%),
-    radial-gradient(circle at 85% 80%, rgba(94, 167, 255, 0.035), transparent 40%);
-  background-size: 40px 40px, 40px 40px, 100% 100%, 100% 100%;
-  background-attachment: fixed;
-  color: var(--text-primary);
-  font-family: "Inter", system-ui, sans-serif;
+  margin: 0;
   min-height: 100vh;
-  transition: background-color 0.4s ease, color 0.4s ease;
+  background: var(--background);
+  color: var(--text-primary);
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-html.light body {
-  background-image:
-    linear-gradient(rgba(0, 0, 0, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.02) 1px, transparent 1px),
-    radial-gradient(circle at 15% 20%, rgba(25, 167, 132, 0.03), transparent 35%),
-    radial-gradient(circle at 85% 80%, rgba(51, 133, 232, 0.025), transparent 40%);
-}
+* { box-sizing: border-box; }
+button, input, select, textarea { font: inherit; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button:not(:disabled), select:not(:disabled) { cursor: pointer; }
+button, a, select, input, textarea { transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease; }
+button:disabled { cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+input[type="checkbox"], input[type="range"] { accent-color: #3b82f6; }
+::selection { color: var(--text-primary); background: rgb(var(--accent-rgb) / 0.24); }
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-}
-::-webkit-scrollbar-track {
-  background-color: transparent;
-}
-
-/* ========================================================================= */
-/* 3. CARD BACKGROUNDS, HOVER GLOW & INTERACTION SURFACES                    */
-/* ========================================================================= */
-
-.dashboard-cockpit {
-  background: linear-gradient(
-    180deg,
-    rgba(13, 21, 23, 0.95) 0%,
-    rgba(10, 16, 18, 0.98) 100%
-  );
+.app-sidebar { background: var(--background-secondary); }
+.app-topbar { background: rgb(var(--background-secondary-rgb) / 0.96); }
+.brand-mark { color: #aacaFF; background: linear-gradient(145deg, #285eae, #19395f); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+.nav-link { position: relative; }
+.nav-link-active { background: rgb(var(--accent-rgb) / 0.12); box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.13); }
+.nav-link-active::before { content: ""; position: absolute; width: 3px; height: 16px; left: 0; top: 50%; transform: translateY(-50%); border-radius: 0 3px 3px 0; background: var(--accent); }
+.card, .dashboard-cockpit {
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 1.75rem;
-  box-shadow: var(--shadow-cockpit);
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
-}
-
-html.light .dashboard-cockpit {
-  background: rgba(255, 255, 255, 0.96);
-  border-color: var(--border);
+  border-radius: 14px;
   box-shadow: var(--shadow-cockpit);
 }
+.card-interactive { transition: border-color 150ms ease, box-shadow 150ms ease; }
+.card-interactive:hover { border-color: rgb(var(--accent-rgb) / 0.5); box-shadow: 0 8px 22px rgb(var(--accent-rgb) / 0.07); }
+.glass-pill { background: var(--surface-elevated); border: 1px solid var(--border); border-radius: 12px; }
+.btn-tactile { transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease; }
+.btn-tactile:active { filter: brightness(0.94); }
+.bg-accent { background-color: #2563eb; color: #ffffff; }
+html.light .bg-accent { background-color: #245bbb; }
 
-.card {
-  background: linear-gradient(
-    145deg,
-    rgba(255, 255, 255, 0.025) 0%,
-    rgba(255, 255, 255, 0.008) 100%
-  ), var(--surface);
-  border: 1px solid rgba(255, 255, 255, 0.065);
-  border-radius: 1.25rem;
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
-  transition: transform 220ms ease-out, border-color 220ms ease-out, box-shadow 220ms ease-out;
-}
+.skip-link { position: fixed; left: 12px; top: -60px; padding: 10px 14px; z-index: 100; border-radius: 8px; background: var(--surface); color: var(--text-primary); }
+.skip-link:focus { top: 12px; }
+main:focus { outline: none; }
 
-html.light .card {
-  background: #FFFFFF;
-  border-color: rgba(0, 0, 0, 0.08);
-  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
-}
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-thumb { background: rgb(var(--text-muted-rgb) / 0.3); border: 2px solid var(--background); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--text-muted-rgb) / 0.5); }
+::-webkit-scrollbar-track { background: transparent; }
 
-/* Contextual Close-In Hover Glow (180-250ms ease-out, restrained halo) */
-.card:hover,
-.card-interactive:hover {
-  border-color: rgba(55, 214, 176, 0.22);
-  box-shadow: 0 8px 28px -4px rgba(0, 0, 0, 0.55), 0 0 16px -2px rgba(55, 214, 176, 0.08);
-  transform: translateY(-1.5px);
-}
-
-html.light .card:hover,
-html.light .card-interactive:hover {
-  border-color: rgba(25, 167, 132, 0.3);
-  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.08), 0 0 12px -2px rgba(25, 167, 132, 0.1);
-  transform: translateY(-1.5px);
-}
-
-.card-interactive {
-  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms ease-out, border-color 220ms ease-out;
-}
-
-.btn-tactile {
-  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease-out, border-color 0.18s ease-out, background-color 0.18s ease-out;
-}
-
-.btn-tactile:active {
-  transform: scale(0.97);
-}
-
-.glass-pill {
-  background-color: var(--surface-elevated);
-  border: 1px solid var(--border);
-  border-radius: 9999px;
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* ========================================================================= */
-/* 4. LIVE INDICATOR BREATHING & SIGNAL ANIMATIONS                            */
-/* ========================================================================= */
-
-@keyframes live-breathing {
-  0%, 100% {
-    opacity: 1;
-    box-shadow: 0 0 6px 1px rgba(66, 211, 146, 0.45);
-  }
-  50% {
-    opacity: 0.65;
-    box-shadow: 0 0 2px 0px rgba(66, 211, 146, 0.18);
-  }
-}
-
-.status-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 9999px;
-  animation: live-breathing 2.2s ease-in-out infinite;
-}
-
-/* Signal Beacon Pulse (communicating state, not decoration) */
-@keyframes beacon-wave {
-  0% {
-    transform: scale(0.95);
-    opacity: 0.7;
-  }
-  100% {
-    transform: scale(1.85);
-    opacity: 0;
-  }
-}
-
-.beacon-ring {
-  position: absolute;
-  inset: -3px;
-  border-radius: 9999px;
-  pointer-events: none;
-  animation: beacon-wave 2.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
-}
-
-/* ========================================================================= */
-/* 5. SLOW AMBIENT LIGHT MOVEMENT (20-40s duration, ease-in-out)              */
-/* ========================================================================= */
-
-@keyframes ambient-drift-1 {
-  0%, 100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(28px, -24px, 0) scale(1.06);
-  }
-}
-
-@keyframes ambient-drift-2 {
-  0%, 100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(-32px, 26px, 0) scale(0.95);
-  }
-}
-
-@keyframes ambient-drift-3 {
-  0%, 100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(24px, 30px, 0) scale(1.04);
-  }
-}
-
-.animate-ambient-1 {
-  animation: ambient-drift-1 28s ease-in-out infinite;
-  will-change: transform;
-}
-
-.animate-ambient-2 {
-  animation: ambient-drift-2 36s ease-in-out infinite;
-  will-change: transform;
-}
-
-.animate-ambient-3 {
-  animation: ambient-drift-3 32s ease-in-out infinite;
-  will-change: transform;
-}
-
-/* Legacy float classes mapped cleanly to slow drift */
-.animate-float-slow {
-  animation: ambient-drift-1 28s ease-in-out infinite;
-  will-change: transform;
-}
-
-.animate-float-slow-reverse {
-  animation: ambient-drift-2 36s ease-in-out infinite;
-  will-change: transform;
-}
-
-/* ========================================================================= */
-/* 6. FAINT VIDEO SCANLINE & CCTV OPTICAL TREATMENT                           */
-/* ========================================================================= */
-
-@keyframes scanline-beam {
-  0% {
-    top: -2%;
-    opacity: 0;
-  }
-  12% {
-    opacity: 0.65;
-  }
-  88% {
-    opacity: 0.65;
-  }
-  100% {
-    top: 102%;
-    opacity: 0;
-  }
-}
-
-.animate-scanline {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(55, 214, 176, 0.05) 15%,
-    rgba(55, 214, 176, 0.45) 50%,
-    rgba(55, 214, 176, 0.05) 85%,
-    transparent 100%
-  );
-  box-shadow: 0 0 6px rgba(55, 214, 176, 0.25);
-  pointer-events: none;
-  animation: scanline-beam 7.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  will-change: top, opacity;
-}
-
-.cctv-scanlines {
-  background: linear-gradient(
-    rgba(18, 16, 16, 0) 50%,
-    rgba(0, 0, 0, 0.18) 50%
-  );
-  background-size: 100% 3px;
-  pointer-events: none;
-}
-
-/* ========================================================================= */
-/* 7. REAL-TIME DATA, SKELETONS & GAUGE ANIMATIONS                            */
-/* ========================================================================= */
-
-/* Value Flash on Telemetry Update (smooth, subtle, non-bouncing) */
-@keyframes value-update-flash {
-  0% {
-    opacity: 0.8;
-    color: var(--accent);
-  }
-  100% {
-    opacity: 1;
-    color: inherit;
-  }
-}
-
-.animate-value-flash {
-  animation: value-update-flash 0.4s ease-out;
-}
-
-/* Smooth transition for bars, gauges, meters (400-700ms ease-out) */
-.gauge-bar-fill,
-.meter-fill,
-[role="progressbar"] > div,
-.progress-bar-fill {
-  transition: width 550ms cubic-bezier(0.16, 1, 0.3, 1), transform 550ms cubic-bezier(0.16, 1, 0.3, 1) !important;
-}
-
-/* Low-Contrast Elegant Skeleton Shimmer (1.5s ease-in-out infinite) */
-@keyframes skeleton-shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-.animate-shimmer,
-.skeleton-shimmer {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.015) 0%,
-    rgba(255, 255, 255, 0.055) 50%,
-    rgba(255, 255, 255, 0.015) 100%
-  );
-  background-size: 200% 100%;
-  animation: skeleton-shimmer 1.5s ease-in-out infinite;
-}
-
-html.light .animate-shimmer,
-html.light .skeleton-shimmer {
-  background: linear-gradient(
-    90deg,
-    rgba(0, 0, 0, 0.015) 0%,
-    rgba(0, 0, 0, 0.045) 50%,
-    rgba(0, 0, 0, 0.015) 100%
-  );
-  background-size: 200% 100%;
-}
-
-/* ========================================================================= */
-/* 8. FAST SUBTLE PAGE TRANSITIONS (180-250ms, fade + 6px vertical)          */
-/* ========================================================================= */
-
-@keyframes page-enter {
-  0% {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-main {
-  animation: page-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.page-transition {
-  animation: page-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-/* Rotating Radar & EQ Bar utilities */
-@keyframes radar-sweep {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.animate-radar {
-  animation: radar-sweep 5s linear infinite;
-}
-
-@keyframes eq-bar-1 { 0%, 100% { height: 4px; } 50% { height: 12px; } }
-@keyframes eq-bar-2 { 0%, 100% { height: 11px; } 50% { height: 4px; } }
-@keyframes eq-bar-3 { 0%, 100% { height: 5px; } 50% { height: 13px; } }
-@keyframes eq-bar-4 { 0%, 100% { height: 12px; } 50% { height: 6px; } }
-
-.eq-bar-1 { animation: eq-bar-1 1.1s ease-in-out infinite; }
-.eq-bar-2 { animation: eq-bar-2 0.9s ease-in-out infinite 0.15s; }
-.eq-bar-3 { animation: eq-bar-3 1.0s ease-in-out infinite 0.3s; }
-.eq-bar-4 { animation: eq-bar-4 0.85s ease-in-out infinite 0.45s; }
-
-/* ========================================================================= */
-/* 9. ACCESSIBILITY: REDUCED MOTION OVERRIDES                                */
-/* ========================================================================= */
+.status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 999px; }
+@keyframes value-update-flash { from { color: var(--accent); } to { color: inherit; } }
+.animate-value-flash { animation: value-update-flash 350ms ease-out; }
+@keyframes skeleton-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.animate-shimmer, .skeleton-shimmer { background: linear-gradient(90deg, rgb(var(--text-muted-rgb) / 0.04), rgb(var(--text-muted-rgb) / 0.12), rgb(var(--text-muted-rgb) / 0.04)); background-size: 200% 100%; animation: skeleton-shimmer 1.8s ease-in-out infinite; }
+.gauge-bar-fill, .meter-fill, .progress-bar-fill { transition: width 400ms ease; }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  ::before,
-  ::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
+  *, ::before, ::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }

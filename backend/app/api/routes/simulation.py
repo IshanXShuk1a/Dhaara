@@ -1,119 +1,120 @@
+"""Controls for the isolated educational lab, never for live camera runtimes."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException
 
-from app.core.auth import require_role
+from app.api.websocket import snapshot_to_payload
+from app.core.auth import get_current_user
 from app.core.state import app_state
-from app.database.database import get_db
-from app.models.events import SystemEventRecord
-from app.models.simulation import SimulationSessionRecord
 from app.models.user import User
-from app.schemas.traffic import SimulationSliderRequest, SimulationAmbulanceRequest, SimulationHelmetViolationRequest
+from app.schemas.traffic import (
+    SimulationSliderRequest, SimulationAmbulanceRequest, SimulationHelmetViolationRequest,
+    SimulationScenarioRequest, SimulationControlRequest,
+)
 from app.services.safety.helmet_analyzer import HelmetState
+from app.services.simulation.lab import SIMULATION_INTERSECTION_ID
+from app.services.simulation.simulation_engine import TrafficSliderState
 
 router = APIRouter(prefix="/api/simulation", tags=["simulation"])
 
 
 def _runtime_or_404(intersection_id: str):
+    if intersection_id != SIMULATION_INTERSECTION_ID:
+        raise HTTPException(409, "Simulation controls are isolated from live intersections; use SIMULATION-LAB")
     runtime = app_state.get(intersection_id)
-    if runtime is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intersection not configured")
+    if runtime is None or runtime.simulation_lab is None:
+        raise HTTPException(404, "Simulation lab is not configured")
     return runtime
 
 
-@router.post("/start")
-def start_simulation(intersection_id: str, db: Session = Depends(get_db), _user: User = Depends(require_role("TRAFFIC_OPERATOR"))):
+def _payload(runtime):
+    result = snapshot_to_payload(SIMULATION_INTERSECTION_ID, runtime.controller)
+    result["simulation"] = runtime.simulation_lab.metadata()
+    return result
+
+
+@router.get("/state")
+def get_simulation_state(intersection_id: str = SIMULATION_INTERSECTION_ID,
+                         _user: User = Depends(get_current_user)):
     runtime = _runtime_or_404(intersection_id)
-    runtime.camera_status = "ONLINE"
-    session = SimulationSessionRecord(intersection_id=intersection_id, is_active=True, slider_state={})
-    db.add(session)
-    db.commit()
-    return {"intersection_id": intersection_id, "status": "SIMULATION_STARTED", "session_id": session.id}
+    with runtime.lock:
+        return _payload(runtime)
+
+
+@router.post("/start")
+def start_simulation(intersection_id: str = SIMULATION_INTERSECTION_ID,
+                     _user: User = Depends(get_current_user)):
+    runtime = _runtime_or_404(intersection_id)
+    with runtime.lock:
+        runtime.simulation_lab.paused = False
+        return {**_payload(runtime), "status": "SIMULATION_STARTED"}
+
+
+@router.post("/scenario")
+def set_scenario(payload: SimulationScenarioRequest,
+                 intersection_id: str = SIMULATION_INTERSECTION_ID,
+                 _user: User = Depends(get_current_user)):
+    runtime = _runtime_or_404(intersection_id)
+    with runtime.lock:
+        runtime.simulation_lab.reset(runtime, payload.scenario)
+        return _payload(runtime)
+
+
+@router.post("/control")
+def set_simulation_control(payload: SimulationControlRequest,
+                           intersection_id: str = SIMULATION_INTERSECTION_ID,
+                           _user: User = Depends(get_current_user)):
+    runtime = _runtime_or_404(intersection_id)
+    with runtime.lock:
+        if payload.paused is not None:
+            runtime.simulation_lab.paused = payload.paused
+        if payload.speed is not None:
+            runtime.simulation_lab.speed = payload.speed
+        return _payload(runtime)
 
 
 @router.post("/reset")
-def reset_simulation(intersection_id: str, _user: User = Depends(require_role("TRAFFIC_OPERATOR"))):
+def reset_simulation(intersection_id: str = SIMULATION_INTERSECTION_ID,
+                     _user: User = Depends(get_current_user)):
     runtime = _runtime_or_404(intersection_id)
-    runtime.scenario_provider.clear()
-    return {"intersection_id": intersection_id, "status": "RESET"}
+    with runtime.lock:
+        runtime.simulation_lab.reset(runtime)
+        return {**_payload(runtime), "status": "RESET"}
 
 
 @router.post("/traffic")
-def set_traffic_sliders(
-    intersection_id: str,
-    payload: SimulationSliderRequest,
-    db: Session = Depends(get_db),
-    _user: User = Depends(require_role("TRAFFIC_OPERATOR")),
-):
-    """Mutates the real ScenarioProvider's VehicleScripts for this
-    intersection. The next frame processed by IntersectionController will
-    see these vehicles through the normal detector->tracker->lane-assigner
-    ->lane-intelligence->decision-engine chain - this does not just set a
-    number the frontend displays."""
+def set_traffic_sliders(payload: SimulationSliderRequest,
+                        intersection_id: str = SIMULATION_INTERSECTION_ID,
+                        _user: User = Depends(get_current_user)):
     runtime = _runtime_or_404(intersection_id)
-    from app.services.simulation.simulation_engine import TrafficSliderState
-
-    current_frame = runtime.controller.last_snapshot.frame_index if runtime.controller.last_snapshot else 0
-    runtime.scenario_builder.apply_slider_state(
-        TrafficSliderState(north=payload.north, south=payload.south, east=payload.east, west=payload.west),
-        current_frame=current_frame,
-    )
-    db.add(SystemEventRecord(
-        intersection_id=intersection_id,
-        event_type="CONFIGURATION_CHANGED",
-        message=f"Simulation traffic sliders set: N={payload.north} S={payload.south} E={payload.east} W={payload.west}",
-        severity="INFO",
-    ))
-    db.commit()
-    return {"intersection_id": intersection_id, "sliders": payload.model_dump()}
+    with runtime.lock:
+        lab = runtime.simulation_lab
+        lab.scenario, lab.label = "custom", "Custom traffic"
+        lab.run_id += 1
+        lab.set_targets(runtime, TrafficSliderState(**payload.model_dump()))
+        lab._process_step(runtime, 0.0)
+        return {**_payload(runtime), "sliders": payload.model_dump()}
 
 
 @router.post("/ambulance")
-def spawn_ambulance(
-    intersection_id: str,
-    payload: SimulationAmbulanceRequest,
-    db: Session = Depends(get_db),
-    _user: User = Depends(require_role("TRAFFIC_OPERATOR")),
-):
+def spawn_ambulance(payload: SimulationAmbulanceRequest,
+                    intersection_id: str = SIMULATION_INTERSECTION_ID,
+                    _user: User = Depends(get_current_user)):
     runtime = _runtime_or_404(intersection_id)
-    current_frame = runtime.controller.last_snapshot.frame_index if runtime.controller.last_snapshot else 0
-    script_id = runtime.scenario_builder.spawn_ambulance(payload.direction, current_frame=current_frame)
-    db.add(SystemEventRecord(
-        intersection_id=intersection_id,
-        event_type="AMBULANCE_DETECTED",
-        message=f"Simulated ambulance spawned in {payload.direction}",
-        severity="WARNING",
-    ))
-    db.commit()
-    return {"intersection_id": intersection_id, "script_id": script_id, "direction": payload.direction}
+    with runtime.lock:
+        script_id = runtime.simulation_lab.spawn_ambulance(runtime, payload.direction, payload.lights_active)
+        return {**_payload(runtime), "script_id": script_id, "direction": payload.direction,
+                "lights_active": payload.lights_active}
 
 
 @router.post("/helmet-violation")
-def spawn_helmet_violation(
-    intersection_id: str,
-    payload: SimulationHelmetViolationRequest,
-    db: Session = Depends(get_db),
-    _user: User = Depends(require_role("TRAFFIC_OPERATOR")),
-):
+def spawn_helmet_violation(payload: SimulationHelmetViolationRequest,
+                           intersection_id: str = SIMULATION_INTERSECTION_ID,
+                           _user: User = Depends(get_current_user)):
     runtime = _runtime_or_404(intersection_id)
-    current_frame = runtime.controller.last_snapshot.frame_index if runtime.controller.last_snapshot else 0
-    script_id = runtime.scenario_builder.spawn_helmet_violation(payload.direction, current_frame=current_frame)
-    # Also directly register the safety event/observation, since the simulation
-    # detector has no separate helmet-classifier confidence channel - this
-    # models what a real helmet-classifier stage would report.
-    event = runtime.controller.report_helmet_observation(
-        track_id=100000 + script_id,
-        lane_id=payload.direction,
-        state=HelmetState.NO_HELMET,
-        confidence=0.9,
-        timestamp=0.0,
-    )
-    db.add(SystemEventRecord(
-        intersection_id=intersection_id,
-        event_type="HELMET_VIOLATION",
-        message=f"Simulated helmet violation in {payload.direction}",
-        severity="WARNING",
-    ))
-    db.commit()
-    return {"intersection_id": intersection_id, "script_id": script_id, "event": event}
+    with runtime.lock:
+        script_id = runtime.scenario_builder.spawn_helmet_violation(payload.direction, runtime.frame_index)
+        event = runtime.controller.report_helmet_observation(
+            track_id=100000 + script_id, lane_id=payload.direction,
+            state=HelmetState.NO_HELMET, confidence=.9, timestamp=0.0)
+        return {"intersection_id": SIMULATION_INTERSECTION_ID, "script_id": script_id, "event": event}

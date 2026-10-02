@@ -1,35 +1,29 @@
-"""
-Generates a small synthetic top-down "intersection" video for pipeline
-testing. This is NOT a stand-in for real traffic footage in production -
-it exists solely so the CV pipeline (video ingestion -> detection overlay
-rendering) can be exercised end-to-end in environments without a real
-camera. The video content itself is just a static intersection backdrop;
-the actual "vehicles" seen by the pipeline come from the SimulationDetector
-scenario script, not from image content in this video.
-"""
-from __future__ import annotations
-
+"""Generate four distinct directional test videos; these contain no real vehicles."""
+from pathlib import Path
+import sys
 import cv2
 import numpy as np
 
 
-def generate_intersection_video(output_path: str, width: int = 640, height: int = 480, num_frames: int = 150, fps: float = 25.0) -> None:
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-
-    for i in range(num_frames):
-        frame = np.full((height, width, 3), (40, 42, 46), dtype=np.uint8)
-        cv2.rectangle(frame, (0, height // 2 - 60), (width, height // 2 + 60), (60, 60, 60), -1)
-        cv2.rectangle(frame, (width // 2 - 60, 0), (width // 2 + 60, height), (60, 60, 60), -1)
-        cv2.putText(frame, f"DHAARA SYNTHETIC TEST FEED - frame {i}", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (180, 180, 180), 1)
-        writer.write(frame)
-
-    writer.release()
+def generate_camera_video(path, direction, width=640, height=360, num_frames=100, fps=25.):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
+    if not writer.isOpened():
+        raise RuntimeError(f"Cannot write {path}")
+    try:
+        color = {"EAST": (50,60,90), "WEST": (80,60,50), "NORTH": (50,90,60), "SOUTH": (90,50,80)}[direction]
+        for index in range(num_frames):
+            image = np.full((height, width, 3), color, np.uint8)
+            cv2.putText(image, f"TEST {direction} {index}", (16, 30), cv2.FONT_HERSHEY_SIMPLEX, .7, (220,220,220), 2)
+            writer.write(image)
+    finally:
+        writer.release()
 
 
 if __name__ == "__main__":
-    import sys
-
-    out = sys.argv[1] if len(sys.argv) > 1 else "./videos/sample_intersection.mp4"
-    generate_intersection_video(out)
-    print(f"Wrote synthetic test video to {out}")
+    output_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("./videos/test_cameras")
+    for direction in ("EAST", "WEST", "NORTH", "SOUTH"):
+        path = output_dir / f"{direction.lower()}.mp4"
+        generate_camera_video(path, direction)
+        print(path)

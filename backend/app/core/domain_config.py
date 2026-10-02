@@ -2,7 +2,7 @@
 Framework-free configuration for DHAARA's domain/business logic.
 
 Deliberately has ZERO third-party dependencies (stdlib `dataclasses` only) so
-that lane intelligence, the signal FSM, the decision engine, fairness,
+that lane intelligence, the signal FSM, the decision engine,
 tracking, lane assignment, and emergency logic can be imported and unit
 tested without FastAPI, Pydantic, or SQLAlchemy installed.
 
@@ -42,17 +42,12 @@ class PressureWeights:
 
 @dataclass(frozen=True)
 class SignalTimings:
-    minimum_green_s: int = 10
-    maximum_green_s: int = 60
-    base_green_s: int = 15
-    yellow_s: int = 3
-    all_red_s: int = 2
-    fixed_phase_s: int = 30
-
-
-@dataclass(frozen=True)
-class FairnessConfig:
-    consecutive_priority_limit: int = 3
+    fixed_phase_s: int = 70
+    yellow_s: float = 3.0
+    score_difference_threshold: float = 20.0
+    empty_score_max: float = 5.0
+    early_switch_min_remaining_s: float = 20.0
+    empty_persistence_s: float = 3.0
 
 
 @dataclass(frozen=True)
@@ -71,7 +66,6 @@ class DomainConfig:
     lane_thresholds: LaneThresholds = field(default_factory=LaneThresholds)
     pressure_weights: PressureWeights = field(default_factory=PressureWeights)
     signal_timings: SignalTimings = field(default_factory=SignalTimings)
-    fairness: FairnessConfig = field(default_factory=FairnessConfig)
     detection: DetectionConfig = field(default_factory=DetectionConfig)
 
 

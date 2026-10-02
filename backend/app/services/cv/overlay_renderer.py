@@ -80,8 +80,8 @@ class OverlayRenderer:
 
             label_lines = [f"{lane.lane_id} APPROACH"]
             if metrics:
-                label_lines.append(f"{metrics.status.value} • {metrics.vehicle_count} VEHICLES")
-                label_lines.append(f"DENSITY: {int(metrics.occupancy * 100)}%")
+                label_lines.append(f"{metrics.vehicle_count} VEHICLES IN ROI")
+                label_lines.append(f"SCORE: {metrics.vehicle_score:g}")
             self._draw_label_block(frame, (lx, ly), label_lines, color)
 
     def _draw_vehicles(self, frame: np.ndarray, vehicles: list[VehicleOverlayItem], show_labels: bool = True) -> None:

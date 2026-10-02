@@ -16,7 +16,7 @@ it independently unit-testable (see app/tests/test_lane_intelligence.py).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from app.core.domain_config import DomainConfig, LaneThresholds, PressureWeights, DEFAULT_CONFIG
@@ -53,7 +53,7 @@ class LaneGeometry:
     """
 
     lane_id: str
-    length_m: float = 50.0
+    length_m: float = 9.144
     capacity_vehicles: int = 25
     # meters of roadway a single queued vehicle is assumed to occupy
     vehicle_spacing_m: float = 7.0
@@ -71,6 +71,8 @@ class LaneMetrics:
     traffic_pressure: float  # 0-100
     status: LaneStatus
     reasons: list[str]  # human-readable supporting factors, for explainability
+    vehicle_score: float = 0.0
+    vehicle_counts: dict[str, int] = field(default_factory=dict)
 
 
 def _clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:

@@ -5,8 +5,8 @@ import { ThemeProvider } from "@/lib/theme";
 import { AppShell } from "@/components/layout/AppShell";
 
 export const metadata: Metadata = {
-  title: "DHAARA - Adaptive Traffic Intelligence",
-  description: "AI-powered adaptive traffic management platform",
+  title: "DHAARA | Traffic Control",
+  description: "Paired traffic signal control, live camera monitoring and a 3D intersection simulation.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

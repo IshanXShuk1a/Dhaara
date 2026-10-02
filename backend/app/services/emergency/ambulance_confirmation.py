@@ -3,7 +3,7 @@ AmbulanceConfirmationTracker
 
 A single uncertain frame must never trigger emergency signal priority. This
 module requires a candidate ambulance track to be seen consistently -
-above `ambulance_confidence`, and moving toward the intersection - for at
+above `ambulance_confidence`, and assigned to a directional camera - for at
 least `ambulance_confirmation_frames` observations within a rolling
 `ambulance_confirmation_window_s` window before it is considered CONFIRMED.
 

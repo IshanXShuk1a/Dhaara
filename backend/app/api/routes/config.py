@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_role
@@ -17,7 +18,6 @@ def get_config(_user: User = Depends(require_role("ADMIN"))):
     return {
         "detection": settings.detection.model_dump(),
         "signal_timings": settings.signal_timings.model_dump(),
-        "fairness": settings.fairness.model_dump(),
         "lane_thresholds": settings.lane_thresholds.model_dump(),
         "pressure_weights": settings.pressure_weights.model_dump(),
     }
@@ -36,7 +36,6 @@ def update_config(
         LaneThresholds as DomainLaneThresholds,
         PressureWeights as DomainPressureWeights,
         SignalTimings as DomainSignalTimings,
-        FairnessConfig as DomainFairnessConfig,
         DetectionConfig as DomainDetectionConfig,
         DomainConfig,
     )
@@ -44,50 +43,43 @@ def update_config(
 
     settings = get_settings()
 
-    if "detection" in payload and isinstance(payload["detection"], dict):
-        for k, v in payload["detection"].items():
-            if hasattr(settings.detection, k):
-                setattr(settings.detection, k, float(v) if isinstance(v, (int, float)) else v)
-
-    if "signal_timings" in payload and isinstance(payload["signal_timings"], dict):
-        for k, v in payload["signal_timings"].items():
-            if hasattr(settings.signal_timings, k):
-                setattr(settings.signal_timings, k, int(v) if isinstance(v, (int, float)) else v)
-
-    if "fairness" in payload and isinstance(payload["fairness"], dict):
-        for k, v in payload["fairness"].items():
-            if hasattr(settings.fairness, k):
-                setattr(settings.fairness, k, int(v) if isinstance(v, (int, float)) else v)
-
-    if "lane_thresholds" in payload and isinstance(payload["lane_thresholds"], dict):
-        for k, v in payload["lane_thresholds"].items():
-            if hasattr(settings.lane_thresholds, k):
-                setattr(settings.lane_thresholds, k, float(v) if isinstance(v, (int, float)) else v)
-
-    if "pressure_weights" in payload and isinstance(payload["pressure_weights"], dict):
-        for k, v in payload["pressure_weights"].items():
-            if hasattr(settings.pressure_weights, k):
-                setattr(settings.pressure_weights, k, float(v) if isinstance(v, (int, float)) else v)
+    validated = {}
+    try:
+        for section in ("detection", "signal_timings", "lane_thresholds", "pressure_weights"):
+            if section in payload:
+                current = getattr(settings, section)
+                if not isinstance(payload[section], dict):
+                    raise HTTPException(422, f"{section} must be an object")
+                validated[section] = type(current).model_validate({**current.model_dump(), **payload[section]})
+    except ValidationError as exc:
+        raise HTTPException(422, detail=exc.errors(include_context=False)) from exc
+    for section, value in validated.items():
+        setattr(settings, section, value)
 
     # Build updated domain config
     updated_domain = DomainConfig(
         lane_thresholds=DomainLaneThresholds(**settings.lane_thresholds.model_dump()),
         pressure_weights=DomainPressureWeights(**settings.pressure_weights.model_dump()),
         signal_timings=DomainSignalTimings(**settings.signal_timings.model_dump()),
-        fairness=DomainFairnessConfig(**settings.fairness.model_dump()),
         detection=DomainDetectionConfig(**settings.detection.model_dump()),
     )
 
     # Propagate to all live controllers
     for runtime in app_state.runtimes.values():
-        c = runtime.controller
-        c._config = updated_domain
-        c._decision_engine._timings = updated_domain.signal_timings
-        c._lane_engine._config = updated_domain
-        c._signal_fsm._timings = updated_domain.signal_timings
-        c._fairness._config = updated_domain.fairness
-        c._helmet_analyzer.config = updated_domain.detection
-        c._ambulance_confirmation._config = updated_domain.detection
+        if runtime.simulation_lab is not None:
+            continue  # live configuration cannot alter an active educational scenario
+        with runtime.lock:
+            c = runtime.controller
+            c._config = updated_domain
+            c._decision_engine._timings = updated_domain.signal_timings
+            c._lane_engine._config = updated_domain
+            c._signal_fsm._timings = updated_domain.signal_timings
+            if runtime.real_detector is not None:
+                runtime.real_detector._confidence_threshold = updated_domain.detection.yolo_confidence
+                runtime.real_detector._ambulance_detector.confidence_threshold = updated_domain.detection.ambulance_confidence
+            c._helmet_detector.confidence_threshold = updated_domain.detection.helmet_confidence
+            c._helmet_analyzer.config = updated_domain.detection
+            c._ambulance_confirmation._config = updated_domain.detection
 
     db.add(SystemEventRecord(
         intersection_id=None,
@@ -102,7 +94,6 @@ def update_config(
         "status": "CONFIG_UPDATED",
         "detection": settings.detection.model_dump(),
         "signal_timings": settings.signal_timings.model_dump(),
-        "fairness": settings.fairness.model_dump(),
         "lane_thresholds": settings.lane_thresholds.model_dump(),
         "pressure_weights": settings.pressure_weights.model_dump(),
     }

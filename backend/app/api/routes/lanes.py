@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user, require_role
+from app.core.state import app_state
 from app.database.database import get_db
 from app.models.lane import Lane
 from app.models.user import User
@@ -24,13 +25,10 @@ def configure_lanes(
     db: Session = Depends(get_db),
     _user: User = Depends(require_role("ADMIN")),
 ):
-    """Replaces this intersection's lane geometry. Configuration only -
-    callers must separately restart/reload the IntersectionController's
-    LaneAssigner for the change to take effect on the live pipeline
-    (see /api/video/start), since polygons are baked into the running
-    LaneAssigner instance for performance."""
-    if not payload:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least one lane is required")
+    """Persist four normalized ROIs and apply them to the live camera assigners."""
+    from app.services.cv.lane_assigner import DIRECTIONS
+    if len(payload) != 4 or {cfg.direction for cfg in payload} != set(DIRECTIONS):
+        raise HTTPException(400, "Configure exactly one ROI for each of EAST, WEST, NORTH and SOUTH")
 
     db.query(Lane).filter(Lane.intersection_id == intersection_id).delete()
     created = []
@@ -51,29 +49,12 @@ def configure_lanes(
         db.refresh(lane)
 
     from app.core.state import app_state
-    from app.services.cv.lane_assigner import LanePolygon, LaneAssigner
     from app.services.lanes.lane_intelligence import LaneGeometry
-
     runtime = app_state.get(intersection_id)
     if runtime is not None:
-        new_polygons = [
-            LanePolygon(
-                lane_id=cfg.direction,
-                direction=cfg.direction,
-                polygon=[tuple(pt) for pt in cfg.polygon],
-                pixels_per_meter=cfg.pixels_per_meter,
-            )
-            for cfg in payload
-        ]
-        runtime.lanes = new_polygons
-        runtime.controller._lane_assigner = LaneAssigner(new_polygons, fps=25.0)
-        runtime.controller._lane_geometry = {
-            cfg.direction: LaneGeometry(
-                lane_id=cfg.direction,
-                length_m=cfg.length_m,
-                capacity_vehicles=cfg.capacity_vehicles,
-            )
-            for cfg in payload
-        }
+        with runtime.lock:
+            for cfg in payload:
+                runtime.controller.configure_camera_roi(cfg.direction, cfg.polygon,
+                    LaneGeometry(cfg.direction, cfg.length_m, cfg.capacity_vehicles), cfg.pixels_per_meter)
 
     return created

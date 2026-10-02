@@ -7,7 +7,6 @@ import { api, ApiError } from "@/lib/api";
 interface ConfigData {
   detection: Record<string, number>;
   signal_timings: Record<string, number>;
-  fairness: Record<string, number>;
   lane_thresholds: Record<string, number>;
   pressure_weights: Record<string, number>;
 }
@@ -63,7 +62,7 @@ export default function SettingsPage() {
       const res = await api.updateConfig(edited);
       setConfig(res);
       setEdited(JSON.parse(JSON.stringify(res)));
-      setSaveSuccess("Configuration safely applied live across all running intersection controllers!");
+      setSaveSuccess("Configuration applied to running controllers.");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save configuration");
     } finally {
@@ -77,7 +76,7 @@ export default function SettingsPage() {
         <div>
           <div className="text-xl font-bold text-text-primary">System Configuration</div>
           <div className="text-xs text-text-muted mt-1">
-            Tune YOLO confidence, signal timing state machine bounds, fairness rules, and pressure calculation weights live.
+            Configure paired 70-second phases, weighted-score switching and detection thresholds.
           </div>
         </div>
         <button
@@ -102,8 +101,8 @@ export default function SettingsPage() {
       {edited && (
         <div className="space-y-4">
           <EditableSection
-            title="Signal Timings (Seconds)"
-            description="Controls the Signal FSM minimum safety clearances and maximum green phases"
+            title="Signal Control Rules"
+            description="Green and yellow duration, pair score difference, empty score, persistence and minimum time remaining"
             sectionKey="signal_timings"
             values={edited.signal_timings}
             onChange={handleFieldChange}
@@ -117,29 +116,7 @@ export default function SettingsPage() {
             onChange={handleFieldChange}
           />
 
-          <EditableSection
-            title="Lane Status Classification (Pressure Thresholds)"
-            description="Pressure boundary scores (0-100) determining FREE, LOW, MODERATE, HIGH, and CONGESTED"
-            sectionKey="lane_thresholds"
-            values={edited.lane_thresholds}
-            onChange={handleFieldChange}
-          />
 
-          <EditableSection
-            title="Traffic Pressure Formula Weights"
-            description="Formula: pressure = w_occ*occupancy + w_queue*queue + w_count*count + w_wait*wait - w_speed*speed"
-            sectionKey="pressure_weights"
-            values={edited.pressure_weights}
-            onChange={handleFieldChange}
-          />
-
-          <EditableSection
-            title="Fairness Protection"
-            description="Prevents high-density arteries from starving cross-streets (maximum consecutive priority wins)"
-            sectionKey="fairness"
-            values={edited.fairness}
-            onChange={handleFieldChange}
-          />
         </div>
       )}
     </div>

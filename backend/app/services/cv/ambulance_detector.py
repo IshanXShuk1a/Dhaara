@@ -6,7 +6,8 @@ Evaluates vehicle bounding boxes for distinct emergency vehicle features:
 - Roof emergency light bar indicators (high luminance peaks in the top 20% of bbox)
 - Red cross / emergency insignia color clusters
 
-Ensures DHAARA never confuses generic trucks or vans with ambulances.
+Color evidence provides a heuristic candidate label and requires footage validation.
+Signal priority separately requires temporal flashing-beacon evidence.
 """
 from __future__ import annotations
 

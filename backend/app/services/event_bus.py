@@ -56,6 +56,10 @@ class EventBus:
     def subscribe(self, subscriber: Subscriber) -> None:
         self._subscribers.append(subscriber)
 
+    def unsubscribe(self, subscriber: Subscriber) -> None:
+        if subscriber in self._subscribers:
+            self._subscribers.remove(subscriber)
+
     def publish(self, event: Event) -> None:
         for subscriber in self._subscribers:
             subscriber(event)

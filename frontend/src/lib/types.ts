@@ -4,8 +4,8 @@
 // fallback to an invented shape.
 
 export type LaneStatus = "FREE" | "LOW" | "MODERATE" | "HIGH" | "CONGESTED";
-export type SignalColor = "GREEN" | "YELLOW" | "ALL_RED";
-export type SignalMode = "FIXED" | "ADAPTIVE" | "MANUAL" | "EMERGENCY";
+export type SignalColor = "GREEN" | "YELLOW";
+export type SignalMode = "FIXED" | "ADAPTIVE" | "MANUAL";
 export type EmergencyState =
   | "NONE"
   | "DETECTED"
@@ -18,6 +18,8 @@ export type UserRole = "ADMIN" | "TRAFFIC_OPERATOR" | "VIEWER";
 
 export interface LaneMetrics {
   vehicle_count: number;
+  vehicle_score: number;
+  vehicle_counts: Record<string, number>;
   occupancy: number;
   queue_length_m: number;
   average_speed_kmph: number;
@@ -43,6 +45,7 @@ export interface SignalDecision {
 export interface SignalState {
   intersection_id: string;
   color: SignalColor;
+  directions: Record<string, "GREEN" | "YELLOW" | "RED">;
   active_direction: string;
   target_direction: string | null;
   countdown_s: number;
@@ -90,13 +93,54 @@ export interface SystemEvent {
 }
 
 // WebSocket payload shape - see app/api/websocket.py:snapshot_to_payload
+export type SignalPair = "EW" | "NS";
+export interface LaneConfig {
+  direction: string;
+  polygon: number[][];
+  coordinate_space: "normalized";
+  pixels_per_meter: number;
+  length_m: number;
+  capacity_vehicles: number;
+}
+export interface ScoreRecord {
+  timestamp: number;
+  lane_scores: Record<string, number>;
+  pair_scores: Record<SignalPair, number | null>;
+  denser_pair: SignalPair | "BALANCED" | null;
+  score_difference: number | null;
+  green_pair: SignalPair | null;
+  yellow_pair?: SignalPair | null;
+  target_pair?: SignalPair | null;
+  signal_state?: SignalColor;
+  action: string;
+  is_simulated: boolean;
+}
 export interface IntersectionWsPayload {
   intersection_id: string;
   status?: "NO_DATA";
   frame_index?: number;
+  timestamp?: number;
+  demand?: {
+    pair_scores: Record<SignalPair, number | null>;
+    denser_pair: SignalPair | "BALANCED" | null;
+    score_difference: number | null;
+    difference_threshold: number;
+    empty_score_max: number;
+    empty_persistence_s: number;
+    empty_elapsed_s: number;
+    phase_duration_s: number;
+    yellow_duration_s: number;
+    full_phase_required: boolean;
+    previous_phase: SignalPair | null;
+    data_complete: boolean;
+    rickshaw_supported?: boolean | null;
+    action: string;
+  };
+  score_records?: ScoreRecord[];
   is_simulated?: boolean;
   signal?: {
     state: SignalColor;
+    directions: Record<string, "GREEN" | "YELLOW" | "RED">;
     active_direction: string;
     target_direction?: string | null;
     countdown_s: number;
@@ -118,16 +162,21 @@ export interface IntersectionWsPayload {
     direction: string | null;
     active_track_id?: number | null;
     active_lane_id?: string | null;
+    flashing_lights_confirmed?: boolean;
+    visible_ambulances?: number;
   };
   safety?: {
     compliant_count: number;
     violation_count: number;
     compliance_rate: number | null;
   };
+  cameras?: Record<string, {status: string; error: string | null; source: string; frame_index: number | null}>;
   lanes?: Record<
     string,
     {
       vehicle_count: number;
+      vehicle_score: number;
+      vehicle_counts: Record<string, number>;
       occupancy: number;
       queue_length_m: number;
       average_speed_kmph: number;

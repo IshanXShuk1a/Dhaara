@@ -23,10 +23,15 @@ def get_current_traffic(intersection_id: str, _user: User = Depends(get_current_
     return {
         "intersection_id": intersection_id,
         "timestamp": last.timestamp,
+        "demand": last.demand,
+        "score_records": last.score_records,
         "is_simulated": last.is_simulated,
         "lanes": {
             lane_id: {
                 "vehicle_count": m.vehicle_count,
+                "vehicle_score": m.vehicle_score,
+                "vehicle_counts": m.vehicle_counts,
+                "density": m.vehicle_count,
                 "occupancy": m.occupancy,
                 "queue_length_m": m.queue_length_m,
                 "average_speed_kmph": m.average_speed_kmph,
@@ -49,3 +54,12 @@ def get_traffic_history(intersection_id: str, db: Session = Depends(get_db), _us
         "volume": service.volume_history(intersection_id),
         "average_pressure_by_lane": service.average_pressure_by_lane(intersection_id),
     }
+
+
+@router.get("/{intersection_id}/traffic/scores/history")
+def get_score_history(intersection_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+    from app.models.events import SystemEventRecord
+    rows = (db.query(SystemEventRecord).filter(SystemEventRecord.intersection_id == intersection_id,
+             SystemEventRecord.event_type == "DECISION_MADE").order_by(SystemEventRecord.timestamp.desc()).limit(100).all())
+    return {"intersection_id": intersection_id,
+            "records": [row.metadata_json for row in rows if "pair_scores" in row.metadata_json]}

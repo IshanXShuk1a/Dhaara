@@ -35,6 +35,7 @@ class VehicleScript:
     # if True, the vehicle is held stationary at start_bbox for the whole
     # range (models a queued/stopped vehicle) instead of interpolating.
     stationary: bool = False
+    direction: str | None = None
 
     def bbox_at(self, frame_index: int) -> tuple[float, float, float, float] | None:
         if frame_index < self.start_frame or frame_index > self.end_frame:
@@ -61,6 +62,7 @@ class ScenarioProvider:
         end_bbox: tuple[float, float, float, float] | None = None,
         confidence: float = 0.9,
         stationary: bool = False,
+        direction: str | None = None,
     ) -> int:
         script_id = next(self._id_counter)
         self._scripts[script_id] = VehicleScript(
@@ -72,6 +74,7 @@ class ScenarioProvider:
             end_bbox=end_bbox or start_bbox,
             confidence=confidence,
             stationary=stationary,
+            direction=direction,
         )
         return script_id
 
@@ -81,9 +84,11 @@ class ScenarioProvider:
     def clear(self) -> None:
         self._scripts.clear()
 
-    def detections_for_frame(self, frame_index: int) -> list[Detection]:
+    def detections_for_frame(self, frame_index: int, direction: str | None = None) -> list[Detection]:
         detections: list[Detection] = []
         for script in self._scripts.values():
+            if direction is not None and script.direction != direction:
+                continue
             bbox = script.bbox_at(frame_index)
             if bbox is not None:
                 detections.append(Detection(bbox=bbox, class_name=script.class_name, confidence=script.confidence))
@@ -113,7 +118,8 @@ class SimulationScenarioBuilder:
         self._lane_bboxes = lane_bboxes  # direction -> representative bbox region to spawn vehicles inside
         self._active_lane_script_ids: dict[str, list[int]] = {d: [] for d in lane_bboxes}
 
-    def apply_slider_state(self, sliders: TrafficSliderState, current_frame: int, horizon_frames: int = 250) -> None:
+    def apply_slider_state(self, sliders: TrafficSliderState, current_frame: int, horizon_frames: int = 250,
+                           hold_queues: bool = False) -> None:
         targets = {"NORTH": sliders.north, "SOUTH": sliders.south, "EAST": sliders.east, "WEST": sliders.west}
         for direction, target_count in targets.items():
             for sid in self._active_lane_script_ids[direction]:
@@ -133,7 +139,7 @@ class SimulationScenarioBuilder:
             for i in range(vehicle_count):
                 offset = i * slot_width
                 bbox = (x1 + offset, y1, x1 + offset + vehicle_width, y2)
-                is_stationary = i < int(vehicle_count * stationary_fraction)
+                is_stationary = hold_queues or i < int(vehicle_count * stationary_fraction)
                 sid = self._provider.add_vehicle(
                     class_name="car",
                     start_frame=current_frame,
@@ -141,6 +147,7 @@ class SimulationScenarioBuilder:
                     start_bbox=bbox,
                     end_bbox=bbox if is_stationary else (bbox[0] + 40, bbox[1], bbox[2] + 40, bbox[3]),
                     stationary=is_stationary,
+                    direction=direction,
                 )
                 self._active_lane_script_ids[direction].append(sid)
 
@@ -153,6 +160,7 @@ class SimulationScenarioBuilder:
             start_bbox=(x1, y1, x1 + (x2 - x1) / 8.0, y2),
             end_bbox=(x2 - (x2 - x1) / 8.0, y1, x2, y2),
             confidence=0.92,
+            direction=direction,
         )
 
     def spawn_helmet_violation(self, direction: str, current_frame: int, duration_frames: int = 60) -> int:
@@ -164,4 +172,5 @@ class SimulationScenarioBuilder:
             start_bbox=(x1 + 10, y1 + 10, x1 + 40, y1 + 40),
             confidence=0.88,
             stationary=True,
+            direction=direction,
         )

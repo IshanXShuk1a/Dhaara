@@ -14,7 +14,7 @@ class Lane(Base):
     direction: Mapped[str] = mapped_column(String)  # NORTH|SOUTH|EAST|WEST
     polygon: Mapped[list] = mapped_column(JSON)  # [[x,y], ...] configured ROI, not hard-coded in frontend
     pixels_per_meter: Mapped[float] = mapped_column(Float, default=8.0)
-    length_m: Mapped[float] = mapped_column(Float, default=50.0)
+    length_m: Mapped[float] = mapped_column(Float, default=9.144)
     capacity_vehicles: Mapped[int] = mapped_column(Integer, default=25)
     status: Mapped[str] = mapped_column(String, default="FREE")  # last computed status, cached for quick reads
 

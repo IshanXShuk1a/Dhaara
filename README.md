@@ -1,296 +1,138 @@
-# DHAARA - AI-Powered Adaptive Traffic Management System
+# DHAARA - Smart Traffic Management
 
-DHAARA is an adaptive traffic-signal control platform designed for modern intelligent transportation systems (ITS). It detects and tracks vehicles per lane, computes explainable traffic-pressure scores per direction, decides which direction should receive the next GREEN phase and for how long, transitions the signal through a safety-enforced finite state machine (FSM), detects and grants emergency priority to approaching ambulances via temporal confirmation, tracks helmet compliance as an independent road-safety signal, coordinates regional traffic corridors across multiple intersections, and exposes live operational telemetry over REST and WebSocket to a Next.js control dashboard.
+This document describes the current design and replaces earlier independent-direction signal logic.
 
----
+## Signal and scoring rules
 
-## 1. Complete System Architecture & Pipeline
+East and West share one phase (EW); North and South share the other (NS). Both directions in the active pair are GREEN; the opposite pair is RED. Every change passes through a configurable yellow interval (default 3 seconds): the outgoing pair becomes YELLOW while the other stays RED, then the outgoing pair turns RED and the receiving pair becomes GREEN. One immutable signal state owns both paired outputs and the phase clock.
 
-```text
-CAMERA / VIDEO (RTSP, File, Webcam, or Simulation Source)
-        ↓
-VIDEO INGESTION (services/cv/video_source.py)
-        ↓
-OBJECT DETECTION (services/cv/detector.py: YOLODetector | SimulationDetector)
-        ↓
-CV HEURISTIC CLASSIFIERS
-  ├─ AmbulanceDetector (services/cv/ambulance_detector.py - livery & strobe peak analysis)
-  └─ HelmetDetector (services/cv/helmet_detector.py - head crop & HSV spatial analysis)
-        ↓
-OBJECT TRACKING (services/cv/tracker.py: CentroidIoUTracker - persistent track IDs)
-        ↓
-LANE ASSIGNMENT (services/cv/lane_assigner.py - polygon ROI, speed, stopped/waiting time)
-        ↓
-LANE INTELLIGENCE ENGINE (services/lanes/lane_intelligence.py)
-  └─ Computes Traffic Pressure (0-100) & classifies FREE, LOW, MODERATE, HIGH, CONGESTED
-        ↓
-DECISION & SAFETY ENGINES (Parallel & Decoupled)
-  ├─ Ambulance Confirmation (services/emergency/ambulance_confirmation.py - N qualifying frames)
-  │    └─ Emergency Manager (services/emergency/emergency_manager.py - DETECTED -> CONFIRMED -> PRIORITY_ACTIVE -> PASSED -> RESOLVED)
-  ├─ Traffic Decision Engine (services/decision/decision_engine.py + fairness.py - pressure-driven selection & starvation prevention)
-  └─ Helmet Analyzer (services/safety/helmet_analyzer.py - safety stats & violation events; STRICTLY decoupled from signal timing)
-        ↓
-SIGNAL SAFETY STATE MACHINE (services/signals/signal_fsm.py)
-  └─ Strictly enforces GREEN -> YELLOW -> ALL_RED -> GREEN (no green-to-green transitions)
-        ↓
-SIGNAL HARDWARE ABSTRACTION CONTROLLER (services/signals/signal_controller.py)
-  ├─ SimulationSignalController (in-memory test & simulation driver)
-  └─ HardwareSignalController (interface for physical NEMA TS2, 170, 2070 traffic controllers)
-        ↓
-INTERSECTION CONTROLLER (services/controllers/intersection_controller.py)
-  └─ Autonomous controller per intersection; owns its own tracker, FSM, and emergency state
-        ↓
-REGIONAL TRAFFIC COORDINATOR (services/controllers/regional_coordinator.py)
-  └─ Aggregates multi-intersection corridor state, green waves, and regional network telemetry
-        ↓
-FASTAPI REST & WEBSOCKET ENGINE (app/api/routes/*.py, app/api/websocket.py)
-        ↓
-NEXT.JS OPERATOR DASHBOARD (frontend/src/app, src/components)
-```
+Four independent videos are sampled repeatedly in one shared YOLO inference batch. Only current detections whose bounding-box centers lie inside their camera's measurement polygon contribute. Vehicles behind the far boundary and missed tracks do not count.
 
----
-
-## 2. Key Modules & Implementations
-
-### A. Computer Vision & Heuristic Analyzers
-1. **Video Ingestion:** `VideoSource` abstraction supporting uploaded files (`UploadedVideoSource`), webcams (`WebcamSource`), RTSP streams (`RTSPVideoSource`), and scripted simulation (`SimulationSource`).
-2. **YOLO Detection & Heuristic Integration:** `YOLODetector` integrates `ultralytics` YOLO models. Vehicles classified as `car`, `bus`, `truck`, or `motorcycle` pass through specialized heuristic filters:
-   - `AmbulanceDetector`: Analyzes vehicle livery, HSV red/orange emergency tone distribution, white body ratio, and top-quarter emergency light bar luminance peaks to identify ambulances without requiring proprietary custom models.
-   - `HelmetDetector`: Crops the upper 30% head region of detected motorcycle riders, analyzes HSV skin tone vs specular reflection/protective helmet coloration, and emits `HELMET`, `NO_HELMET`, or `UNKNOWN`.
-3. **Centroid + IoU Tracker:** Assigns persistent integer track IDs, updates bounding box kinematics, computes instantaneous velocity, and tolerates frame occlusions (configurable `max_missed_frames`).
-4. **Lane Assigner:** Projects track centroids into configurable lane polygons using ray casting (`point_in_polygon`), calculates lane-specific stopped states, and measures waiting time accumulation.
-5. **Overlay Renderer:** Generates real-time annotated visual frames with lane boundaries, semi-transparent status heat fill, vehicle bounding boxes, track IDs, speed vectors, ambulance emergency tags, and helmet violation badges. Toggles for boxes, IDs, lane polygons, and occupancy heat fill can be adjusted on the fly.
-
-### B. Traffic Intelligence & Decision Engine
-1. **Explainable Traffic Pressure Formula:**
-   $$\text{Pressure} = w_{\text{occ}} \cdot O + w_{\text{queue}} \cdot \left(\frac{Q}{Q_{\max}}\right) + w_{\text{wait}} \cdot \left(\frac{W}{W_{\max}}\right) + w_{\text{count}} \cdot \left(\frac{C}{C_{\max}}\right) + w_{\text{speed}} \cdot \max\left(0, 1 - \frac{S}{S_{\text{free}}}\right)$$
-   Normalized to `[0, 100]` and classified into `FREE`, `LOW`, `MODERATE`, `HIGH`, or `CONGESTED`.
-2. **Decision Engine & Starvation Prevention:**
-   - Evaluates real-time pressure across all approaches.
-   - Dynamic green time allocation: scales from `minimum_green_s` up to `maximum_green_s` based on measured demand.
-   - `FairnessTracker`: Prevents approach starvation by enforcing `consecutive_priority_limit` (default: 3 wins max before an approach is temporarily skipped in favor of waiting traffic).
-   - Generates explicit human-readable reasons stating vehicle count, queue length, waiting time, and pressure percentage.
-
-### C. Signal Safety FSM & Signal Modes
-1. **Guaranteed Safe Transitions:**
-   - States: `GREEN -> YELLOW -> ALL_RED -> GREEN`.
-   - Direct GREEN-to-GREEN transitions are structurally impossible.
-   - Enforces configurable `minimum_green_s` before terminating green, unless safely overridden by an emergency vehicle with forced early yellow.
-2. **Signal Modes:**
-   - `ADAPTIVE`: Dynamic, AI-driven traffic pressure decisions.
-   - `FIXED`: Rigid 30-second fixed-time cycling per approach.
-   - `MANUAL`: Operator hold/override for specific approaches (e.g. VIP convoy or traffic police intervention).
-
-### D. Emergency Vehicle Priority (Ambulance)
-1. **Temporal Confirmation Tracker:**
-   - Single-frame detections are marked as `CANDIDATE`.
-   - An ambulance is only `CONFIRMED` after qualifying across $N$ frames (default: 8 frames) within a sliding time window (default: 4.0s).
-   - Directional vector analysis verifies that the ambulance is actively approaching the intersection center.
-2. **Emergency Lifecycle:**
-   `DETECTED -> CONFIRMED -> PRIORITY_REQUESTED -> PRIORITY_ACTIVE -> PASSED -> RESOLVED`.
-3. **FSM Preemption:** Triggers safe early termination of the conflicting phase (with standard yellow and clearance all-red) to provide green wave priority.
-
-### E. Independent Road Safety (Helmet Compliance)
-- `HelmetAnalyzer` tracks motorcycle helmet compliance as a distinct safety signal.
-- Deliberately decoupled from signal control: a helmet violation **never alters signal timing** or phase selection.
-- Generates timestamped, track-referenced `SafetyEvent` records stored in the database and displayed on the safety dashboard.
-
-### F. Regional Corridor Coordination & Multi-Intersection
-- `RegionalTrafficCoordinator` monitors multiple intersections across city zones (seeded with `OD-BBSR-001`, `OD-BBSR-002`, `OD-BBSR-003`, and `OD-BBSR-004`).
-- Computes corridor-wide throughput, average network delay, and overall network health (`ONLINE`, `HIGH_TRAFFIC`, `EMERGENCY`).
-- Supports future green wave progression offsets between adjacent controllers.
-
----
-
-## 3. Repository Structure
+Per-direction score:
 
 ```text
-code/
-├── backend/
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── routes/        # REST endpoints (health, auth, intersections, lanes, traffic, signals, video, emergency, safety, analytics, simulation, events, config)
-│   │   │   └── websocket.py   # High-throughput real-time WebSocket handler (/ws/intersections/{id})
-│   │   ├── core/              # Config, domain parameters, JWT auth with native bcrypt, logging, state
-│   │   ├── database/          # SQLAlchemy session management and SQLite/Postgres DB setup
-│   │   ├── models/            # Database ORM models (snapshots, signals, decisions, emergencies, safety, events)
-│   │   ├── schemas/           # Pydantic schemas for requests and responses
-│   │   ├── services/
-│   │   │   ├── analytics/     # Regional and intersection historical aggregation service
-│   │   │   ├── controllers/   # Autonomous IntersectionController & RegionalTrafficCoordinator
-│   │   │   ├── cv/            # Ingestion, YOLODetector, AmbulanceDetector, HelmetDetector, Tracker, LaneAssigner, OverlayRenderer
-│   │   │   ├── decision/      # TrafficDecisionEngine & FairnessTracker
-│   │   │   ├── emergency/     # Ambulance temporal confirmation & EmergencyManager
-│   │   │   ├── lanes/         # LaneIntelligenceEngine & traffic pressure formulas
-│   │   │   ├── safety/        # HelmetAnalyzer & safety metrics
-│   │   │   ├── signals/       # SignalFSM, SimulationSignalController, HardwareSignalController
-│   │   │   ├── simulation/    # Scripted scenario engine for testing and demonstrations
-│   │   │   └── event_bus.py   # In-process pub/sub event bus with DB persistence
-│   │   ├── tests/             # Unit and integration test suites (signal FSM, tracker, decision, CV detectors, modes, API)
-│   │   └── main.py            # FastAPI application assembly, lifespan lifecycle, background control loop
-│   ├── scripts/
-│   │   ├── generate_synthetic_video.py  # Generates synthetic test video backdrop
-│   │   └── run_pipeline_demo.py         # Full end-to-end integration demo runner
-│   ├── requirements.txt
-│   └── .env.example
-└── frontend/
-    ├── src/
-    │   ├── app/               # Next.js App Router pages (Dashboard, Intersections, Analytics, Emergencies, Safety, Simulation, Settings, Login)
-    │   ├── components/        # UI components (DecisionCard, SignalCard, LiveVideoCard, LaneCard, KpiCard, PressureChart, EventTimeline)
-    │   └── lib/               # Typed API client, WebSocket subscription hook, AuthContext, IntersectionContext
-    ├── package.json
-    ├── tailwind.config.ts
-    └── .env.local.example
+score = 2 * cars + 1.5 * autos/rickshaws + 1 * two-wheelers
+EW = (East score + West score) / 2
+NS = (North score + South score) / 2
 ```
 
----
+Buses, trucks and ambulances currently use the car weight (2); bicycles use the two-wheeler weight (1). Custom YOLO labels such as `auto`, `autorickshaw`, `auto_rickshaw`, `rickshaw`, `motorbike` and `scooter` are normalized before scoring. Standard COCO YOLOv8n does not distinguish rickshaws: separate rickshaw recognition requires custom-trained weights. The dashboard reports unsupported rickshaw recognition rather than inventing counts. A missing custom model produces an error.
 
-## 4. Setup & Running Instructions
+- Normal operation alternates 70-second GREEN phases between EW and NS, even if the same pair remains denser. The yellow interval follows green and the next 70-second green timer starts when yellow finishes. Re-requesting the current pair never restarts its timer.
+- At initial startup, a pair leading by at least **20 points** can receive the first phase; smaller differences start with EW.
+- Early switching requires the current green pair's average score to remain **<=5 for 3 seconds**, the opposing pair to lead by **at least 20 points**, and **more than 20 seconds** remaining.
+- The pair opened early receives a full **70-second green phase after yellow**. It cannot be cut short by another demand switch; normal alternation resumes at its expiry.
+- Incomplete camera data disables demand-based switching. Normal timed alternation continues; missing input is not treated as an empty road.
+- An ambulance can override demand/timing only while its identity and **flashing emergency lights** are confirmed. A visible ambulance with lights off receives no special green. Red/blue roof-beacon evidence must show repeated on/off transitions across frames; steady markings, headlights and steady light bars do not confirm flashing. Stopped ambulances can qualify. Ambulance priority can use the whole directional camera feed; the 30-foot boundary still limits traffic scores. Emergency priority ends when the visible flashing evidence ends, and the normal phase clock resumes.
 
-### Backend (FastAPI + Python 3.10+)
+Yellow applies to normal timer changes, early switches, manual commands and ambulance priority. Repeated requests cannot restart or bypass yellow. If ambulance flashing evidence ends while its request is pending, yellow still completes and the previous green timer resumes without granting delayed ambulance priority.
 
-1. Navigate to the backend directory and activate the virtual environment:
-   ```bash
-   cd backend
-   # Linux / macOS:
-   python3 -m venv .venv && source .venv/bin/activate
-   # Windows PowerShell:
-   python -m venv .venv; .\.venv\Scripts\Activate.ps1
-   ```
+ADAPTIVE applies these demand rules. FIXED uses the same paired timer without early demand switching. MANUAL holds the selected pair; a confirmed flashing ambulance can still receive priority. Selecting either EAST/WEST maps to EW, and NORTH/SOUTH maps to NS. Signal output currently uses `SimulationSignalController`.
 
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+## Camera setup and the 30-foot boundary
 
-3. Configure environment:
-   ```bash
-   cp .env.example .env
-   ```
+Copy `backend/.env.example` to `backend/.env` and supply four distinct footage paths:
 
-4. Generate synthetic test video (optional, for environments without real camera feeds):
-   ```bash
-   python scripts/generate_synthetic_video.py ./videos/sample_intersection.mp4
-   ```
-
-5. Launch the backend server:
-   ```bash
-   uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-   ```
-
-   *Default Credentials:*
-   - **Username:** `admin`
-   - **Password:** `dhaara-admin` (auto-seeded on initial startup)
-
-### Frontend (Next.js 14 + React 18 + Tailwind CSS)
-
-1. Navigate to the frontend directory:
-   ```bash
-   cd frontend
-   npm install
-   ```
-
-2. Configure environment:
-   ```bash
-   cp .env.local.example .env.local
-   # Ensure NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-   ```
-
-3. Launch development server:
-   ```bash
-   npm run dev
-   ```
-   Open `http://localhost:3000` in your browser.
-
----
-
-## 5. Judge Demonstration Guide (6 Live Scenarios)
-
-The DHAARA dashboard includes an interactive **Simulation & Manual Control Console** at `/simulation` designed specifically for live demonstrations and judging evaluations.
-
-### Scenario 1: Heavy Traffic Congestion & Autonomous Dynamic Signal Shift
-1. Navigate to **Simulation** (`/simulation`).
-2. Under "Presets", click **"Heavy South Traffic"** (sets South vehicles to 28, others to 2-4).
-3. Return to **Dashboard** (`/`).
-4. **Observe:**
-   - The South approach lane card turns red (`CONGESTED`), with Queue Length and Traffic Pressure spiking above 80%.
-   - The **Decision Card** explains: *"Selected SOUTH for 48s. Highest traffic pressure (86.4%). Queue length: 52.0m. Average waiting time: 44.0s."*
-   - The **Signal Card** safely transitions: North turns YELLOW (3s) -> ALL_RED (2s) -> South turns GREEN.
-
-### Scenario 2: Traffic Demand Shift & Dynamic Re-allocation
-1. In `/simulation`, click **"Heavy East Traffic"** (East vehicles spike to 27, South returns to normal).
-2. Return to `/`.
-3. **Observe:**
-   - Traffic pressure immediately recalculates for the East approach.
-   - When the South green timer completes (or maximum green is reached), the Decision Engine allocates the next green phase to East.
-   - The **Pressure Chart** displays the real-time pressure crossover.
-
-### Scenario 3: Ambulance Emergency Priority & Temporal Confirmation
-1. In `/simulation`, find "Emergency Vehicle Injection".
-2. Select Approach **WEST** and click **"Spawn Approaching Ambulance"**.
-3. Return to `/` or open `/emergencies`.
-4. **Observe:**
-   - TopBar displays a pulsing **`PRIORITY: CONFIRMED`** badge.
-   - The Emergency Card moves through `DETECTED -> CONFIRMED -> PRIORITY_REQUESTED -> PRIORITY_ACTIVE`.
-   - The Signal FSM terminates any conflicting green with safety clearances (YELLOW -> ALL_RED) and grants immediate priority GREEN to WEST.
-   - When the ambulance passes, priority clears and normal adaptive control resumes.
-
-### Scenario 4: Helmet Violation & Safety Decoupling Verification
-1. In `/simulation`, find "Road Safety Injection".
-2. Select Approach **NORTH**, choose Status **"NO HELMET"**, and click **"Report Helmet Observation"**.
-3. Return to `/` or open `/safety`.
-4. **Observe:**
-   - The KPI card "Helmet Violations" increments.
-   - The Event Timeline logs a `HELMET_VIOLATION` event with track ID and confidence.
-   - **Crucial Safety Assertion:** The active signal phase and countdown are **completely unaffected**, proving that motorcycle safety monitoring runs in parallel without interfering with signal safety.
-
-### Scenario 5: Police & Operator Manual Override
-1. In `/simulation`, scroll to "Police & Operator Manual Signal Override".
-2. Select **MANUAL** mode, pick Target Approach **NORTH**, and click **"Apply Mode & Override"**.
-3. Return to `/`.
-4. **Observe:**
-   - The TopBar mode indicator switches to **`MANUAL`**.
-   - The Signal Card holds GREEN on NORTH indefinitely.
-   - When finished, switch mode back to **`ADAPTIVE`** to re-engage automated pressure-based decisions.
-
-### Scenario 6: Regional Corridor Network Monitoring
-1. Click **Intersections** (`/intersections`) or **Analytics** (`/analytics`).
-2. **Observe:**
-   - City-wide regional corridor view with 4 active nodes (`OD-BBSR-001`, `OD-BBSR-002`, `OD-BBSR-003`, `OD-BBSR-004`).
-   - Live status badges reflecting `ONLINE`, `HIGH_TRAFFIC`, or `EMERGENCY`.
-   - Aggregated network-wide vehicle count, average network delay, and throughput metrics.
-
----
-
-## 6. Real Hardware vs. Simulation Architecture
-
-DHAARA is architected so that the simulation engine is strictly an input adapter for demonstrations and testing; the core intelligence and safety pipeline is identical in production.
-
-| Pipeline Component | Simulation Mode (Judge Demo) | Real-World Production Deployment |
-|---|---|---|
-| **Video Source** | `SimulationSource` / `UploadedVideoSource` reading looped MP4 | `RTSPVideoSource` connecting to 4K H.264/H.265 IP traffic cameras via ONVIF/RTSP |
-| **Object Detection** | `SimulationDetector` generating parameterized detections | `YOLODetector` executing YOLOv8/YOLOv11 on edge NVIDIA Jetson or discrete GPU |
-| **Emergency Detection** | Scripted ambulance triggers or livery/strobe analysis | Real-time siren acoustic sensors (CAN bus) + camera livery strobe peak analysis |
-| **Signal Controller** | `SimulationSignalController` mutating internal state | `HardwareSignalController` communicating over NTCIP 1202 / NEMA TS2 / 170 / 2070 controller cabinets |
-| **Lane Sensors** | Bounding box spatial projection into polygon ROIs | Calibrated camera homography matrices + inductive loop detector telemetry |
-| **Data Persistence** | Local SQLite (`dhaara.db`) | High-availability PostgreSQL with TimescaleDB time-series indexing |
-
----
-
-## 7. Automated Test Suite
-
-Run the unit test suite:
-```bash
-cd backend
-python -m unittest discover -s app/tests -p "test_*.py" -v
+```dotenv
+EAST_VIDEO=./videos/east.mp4
+WEST_VIDEO=./videos/west.mp4
+NORTH_VIDEO=./videos/north.mp4
+SOUTH_VIDEO=./videos/south.mp4
+MODEL_PATH=./models_store/yolov8n.pt
 ```
 
-Tests cover:
-- `test_signal_fsm.py`: Guaranteed color sequence (`GREEN -> YELLOW -> ALL_RED -> GREEN`), minimum green enforcement, emergency preemption.
-- `test_lane_intelligence.py`: Pressure formula boundary conditions, explainable reason generation, speed weighting.
-- `test_emergency.py`: Ambulance temporal confirmation window, sliding frame threshold, emergency state lifecycle.
-- `test_decision_engine.py`: Pressure-based direction selection, green time scaling, fairness starvation prevention.
-- `test_tracker_and_lanes.py`: Persistent track ID assignment, occlusion tolerance, stopped vehicle accumulation.
-- `test_helmet_analyzer.py`: Helmet compliance rate calculation, single-event emission, architectural decoupling guard.
-- `test_cv_detectors_and_modes.py`: Ambulance heuristic classifier, helmet head crop classifier, FIXED and MANUAL controller modes.
-- `test_signal_controller.py`: Hardware abstraction interface validation.
+Relative paths resolve under `backend/`. Missing files remain OFFLINE; they do not substitute another camera or synthetic traffic. Automatic regional demo nodes have been removed. Previously seeded demo nodes are removed only if they contain no configured real cameras or non-simulated traffic records. The Simulation page uses a separate educational runtime; it cannot replace the dashboard's camera sources or control its live intersection.
+
+Each camera needs a convex four-point normalized polygon ordered **far-left, far-right, near-right, near-left**. Mark the far edge at a surveyed **30 ft (9.144 m)** from the traffic signal. The default trapezoid is an initial boundary, not proof of physical distance: camera perspective alone cannot establish feet or meters without road measurements.
+
+ADMIN users can select **Set 30 ft boundary** on a camera, redraw the four corners on its frame, and save. Changes persist and apply live. The API also supports:
+
+```text
+GET /api/intersections/{id}/lanes
+PUT /api/intersections/{id}/lanes
+```
+
+PUT requires all four directions. An entry looks like:
+
+```json
+{"direction":"EAST","polygon":[[0.35,0.20],[0.65,0.20],[0.90,0.90],[0.10,0.90]],"coordinate_space":"normalized","pixels_per_meter":8,"length_m":9.144,"capacity_vehicles":25}
+```
+
+Persisted boundaries take precedence over environment defaults on later starts. `pixels_per_meter` applies to optional speed diagnostics, not weighted scoring.
+
+## Dashboard and records
+
+The dashboard contains paired green/yellow countdowns, four feeds, ROI class counts and lane scores, EW/NS average scores, the current denser pair and ambulance flashing-light status. Charts, forecast data, the old sidebar control panel, fake notifications and inactive search controls are removed.
+
+Master View shows all four feeds. Direction tabs show one full independent camera frame. Boundary overlays, snapshot downloads and fullscreen remain available. Snapshot images are sampled from video for processing; per-frame image files are not continuously written to disk.
+
+Measured lane/pair scores and the denser pair are recorded about every two seconds and on phase changes using the existing structured database event log. Live records are bounded in memory; persisted records survive restart. Educational simulation records remain in the lab's memory and never enter the live database event log or dashboard.
+
+```text
+GET /api/intersections/{id}/traffic
+GET /api/intersections/{id}/traffic/scores/history
+GET /api/intersections/{id}/signal
+GET /api/video/frame?intersection_id={id}&direction=EAST
+WS  /ws/intersections/{id}
+```
+
+Frames retain the full camera perspective. Unavailable cameras return HTTP 503. REST and WebSocket output include weighted lane scores, class counts, pair averages, denser-pair records and paired GREEN/YELLOW/RED maps.
+
+## Educational simulation
+
+Open **Simulation** to explore the WebGL 3D intersection: moving cars, E/W/N/S road labels, crosswalks, paired traffic lights, buildings and trees. Drag to orbit, scroll/pinch to zoom, or select the top view. Case buttons demonstrate balanced traffic, either busy pair and both nearly-empty-green situations. Pause, restart and 1×/2×/5×/10× speeds operate the simulation clock. Ambulance controls demonstrate lights on versus off. Approaching cars stop on red/yellow; vehicles already crossing clear the junction. The scene is a schematic miniature, not a calibrated camera or road model.
+
+`SIMULATION-LAB` is a separate in-memory controller, detector, scenario provider and virtual clock. It uses the production tracking, ROI scoring, paired decision and yellow-transition pipeline, but it has no uploaded camera inputs and is excluded from live intersection lists and regional coordination. All authenticated users, including VIEWER users, can operate this lab; permission to change real signals remains restricted to operators.
+
+The presets are balanced traffic (8 cars in each direction), busy NS (18 cars each in N/S and 4 each in E/W), busy EW (the inverse), and two early-switch cases (2 cars each on the green pair, 18 each on the red pair, and 40 seconds of green remaining). Preset demand is replenished for a repeatable lesson rather than presented as a camera measurement. Pair scores are computed from the scripted detections with the same car weight of 2. Early-switch cases show 3 seconds of empty-demand confirmation, 3 seconds of yellow and a full 70-second receiving phase. Normal timer alternation remains active even when one pair stays busier.
+
+```text
+GET  /api/simulation/state
+POST /api/simulation/scenario  {"scenario":"balanced"}
+POST /api/simulation/control   {"paused":false,"speed":5}
+POST /api/simulation/reset
+POST /api/simulation/ambulance {"direction":"NORTH","lights_active":true}
+WS   /ws/intersections/SIMULATION-LAB
+```
+
+Scenario names are `balanced`, `ns_busy`, `ew_busy`, `empty_ew` and `empty_ns`. Speed values are 1, 2, 5 and 10; speed and pause only affect the lab. REST and WebSocket snapshots add `simulation` metadata with the scenario, reset identifier, target counts, paused state, speed, elapsed virtual time and visible ambulance. Ambulance demonstrations render flashing roof pixels through the existing temporal beacon detector; an ambulance with lights off does not receive priority. Simulation routes reject real intersection IDs, and video routes reject the lab ID.
+
+## Run on Windows PowerShell
+
+Install dependencies once from the repository root:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
+Copy-Item backend/.env.example backend/.env
+```
+
+Configure the four paths and boundaries. Start the backend:
+
+```powershell
+Set-Location D:\Github\Dhaara\backend
+..\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+Start the frontend in another terminal:
+
+```powershell
+Set-Location D:\Github\Dhaara\frontend
+npm ci
+npm run dev
+```
+
+Open http://localhost:3000. Initial login: `admin` / `dhaara-admin`.
+
+## Validation
+
+```powershell
+# From backend/
+..\.venv\Scripts\python.exe -m pytest app/tests -q --basetemp=.pytest_cache/test_tmp
+..\.venv\Scripts\python.exe scripts/run_pipeline_demo.py
+# From frontend/
+npx tsc --noEmit --incremental false
+npm run build
+```
+
+Tests cover class weights, pair means, timing and early-switch boundaries, persistent empty demand, full receiving phases, missing cameras, paired outputs, flashing-light confirmation, source isolation, ROI exclusion, database records and API/WebSocket output. Synthetic beacon tests verify the temporal algorithm; real ambulance identification and flashing-light accuracy still require validation against camera footage.

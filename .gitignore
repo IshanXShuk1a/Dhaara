@@ -1,5 +1,12 @@
 # Dependencies
 node_modules/
+.npm-cache/
+.cache/
+.browser-cache/
+backend/videos/four_camera_demo.mp4
+backend/videos/test_cameras/
+backend/videos/uploads/
+Ultralytics/
 .pnp
 .pnp.js
 

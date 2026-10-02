@@ -50,6 +50,9 @@ def snapshot_to_payload(intersection_id: str, controller) -> dict:
     return {
         "intersection_id": intersection_id,
         "frame_index": snapshot.frame_index,
+        "timestamp": snapshot.timestamp,
+        "demand": snapshot.demand,
+        "score_records": snapshot.score_records,
         "is_simulated": snapshot.is_simulated,
         "signal": {
             "state": snapshot.signal_state,
@@ -57,6 +60,7 @@ def snapshot_to_payload(intersection_id: str, controller) -> dict:
             "target_direction": getattr(snapshot, "signal_target_direction", None),
             "countdown_s": snapshot.signal_countdown_s,
             "mode": getattr(snapshot, "signal_mode", "ADAPTIVE"),
+            "directions": snapshot.direction_signals,
         },
         "decision": (
             {
@@ -69,6 +73,10 @@ def snapshot_to_payload(intersection_id: str, controller) -> dict:
                 "waiting_time_s": snapshot.decision.waiting_time_s,
                 "vehicle_count": snapshot.decision.vehicle_count,
                 "fairness_applied": snapshot.decision.fairness_applied,
+                "action": snapshot.decision.action,
+                "pair_scores": snapshot.decision.pair_scores,
+                "denser_pair": snapshot.decision.denser_pair,
+                "score_difference": snapshot.decision.score_difference,
             }
             if snapshot.decision
             else None
@@ -78,15 +86,21 @@ def snapshot_to_payload(intersection_id: str, controller) -> dict:
             "direction": snapshot.emergency_direction,
             "active_track_id": controller.emergency_manager.active_track_id,
             "active_lane_id": controller.emergency_manager.active_lane_id,
+            "flashing_lights_confirmed": snapshot.ambulance_lights.get(controller.emergency_manager.active_track_id, False),
+            "visible_ambulances": len(snapshot.ambulance_lights),
         },
         "safety": getattr(snapshot, "safety_summary", {
             "compliant_count": controller.helmet_analyzer.compliant_count,
             "violation_count": controller.helmet_analyzer.violation_count,
             "compliance_rate": controller.helmet_analyzer.compliance_rate,
         }),
+        "cameras": snapshot.camera_statuses,
         "lanes": {
             lane_id: {
                 "vehicle_count": m.vehicle_count,
+                "vehicle_score": m.vehicle_score,
+                "vehicle_counts": m.vehicle_counts,
+                "density": m.vehicle_count,
                 "occupancy": m.occupancy,
                 "queue_length_m": m.queue_length_m,
                 "average_speed_kmph": m.average_speed_kmph,
@@ -113,7 +127,11 @@ async def intersection_ws(websocket: WebSocket, intersection_id: str):
     try:
         # Send current state immediately on connect, then wait for the
         # background control loop to push further updates via broadcast().
-        await websocket.send_json(snapshot_to_payload(intersection_id, runtime.controller))
+        with runtime.lock:
+            payload = snapshot_to_payload(intersection_id, runtime.controller)
+            if runtime.simulation_lab is not None:
+                payload["simulation"] = runtime.simulation_lab.metadata()
+        await websocket.send_json(payload)
         while True:
             # We don't expect inbound messages, but awaiting receive lets us
             # detect disconnects promptly rather than only on the next send.

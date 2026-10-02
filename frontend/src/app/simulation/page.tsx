@@ -1,331 +1,143 @@
 "use client";
 
-import { useState } from "react";
-import { useIntersections } from "@/lib/intersectionContext";
+import dynamic from "next/dynamic";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
 import { useIntersectionSocket } from "@/lib/useIntersectionSocket";
-import { useAuth, canOperate } from "@/lib/auth";
-import { api, ApiError } from "@/lib/api";
+import { SIMULATION_CASES, SIMULATION_ID, type SimulationDirection, type SimulationSnapshot, type SimulationSpeed } from "@/lib/simulation";
 
-const DIRECTIONS = ["NORTH", "SOUTH", "EAST", "WEST"] as const;
+const IntersectionScene = dynamic(() => import("@/components/simulation/IntersectionScene"), {
+  ssr: false, loading: () => <div className="flex h-[440px] items-center justify-center bg-[#dce7f0] text-sm text-slate-600">Preparing the 3D intersection…</div>,
+});
+
+function ControlIcon({ name }: { name: "play" | "pause" | "reset" }) {
+  return <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    {name === "play" ? <path d="m7 4 9 6-9 6z" /> : name === "pause" ? <path d="M7 4v12M13 4v12" /> : <path d="M4 7a6 6 0 1 1 0 6M4 3v4h4" />}
+  </svg>;
+}
 
 export default function SimulationPage() {
-  const { selectedId } = useIntersections();
-  const { role } = useAuth();
-  const { payload } = useIntersectionSocket(selectedId);
-  const [sliders, setSliders] = useState({ north: 10, south: 10, east: 10, west: 10 });
-  const [mode, setMode] = useState("ADAPTIVE");
-  const [operatorNote, setOperatorNote] = useState("Judge evaluation demo override");
-  const [message, setMessage] = useState<string | null>(null);
+  const { payload, status, lastUpdate } = useIntersectionSocket(SIMULATION_ID);
+  const [snapshot, setSnapshot] = useState<SimulationSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
-  const canControl = canOperate(role);
+  const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<"perspective" | "overhead">("perspective");
+  const [resetView, setResetView] = useState(0);
+  const [ambulanceDirection, setAmbulanceDirection] = useState<SimulationDirection>("NORTH");
+  const [now, setNow] = useState(Date.now());
+  const [receivedAt, setReceivedAt] = useState(Date.now());
 
-  async function run(action: () => Promise<unknown>, label: string) {
-    if (!selectedId) return;
-    setBusy(true);
-    setMessage(null);
-    try {
-      await action();
-      setMessage(`${label}: executed successfully`);
-    } catch (err) {
-      setMessage(err instanceof ApiError ? `${label} failed: ${err.message}` : `${label} failed`);
-    } finally {
-      setBusy(false);
-    }
+  useEffect(() => {
+    let active = true;
+    api.getSimulation().then(data => { if (active) { setSnapshot(current => current ?? data); setReceivedAt(Date.now()); } })
+      .catch(e => { if (active) setError(e instanceof Error ? e.message : "Cannot load the simulation."); });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    if (!payload) return;
+    const incoming = payload as SimulationSnapshot;
+    setSnapshot(current => current?.simulation && incoming.simulation && incoming.simulation.run_id < current.simulation.run_id ? current : incoming);
+    setReceivedAt(lastUpdate ?? Date.now());
+  }, [payload, lastUpdate]);
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 100); return () => window.clearInterval(timer); }, []);
+
+  async function run(action: () => Promise<SimulationSnapshot>) {
+    setBusy(true); setError(null);
+    try { const data = await action(); setSnapshot(data); setReceivedAt(Date.now()); }
+    catch (e) { setError(e instanceof Error ? e.message : "Simulation action failed."); }
+    finally { setBusy(false); }
   }
 
-  // Judge Demo Scenarios (Spec Section 46)
-  async function triggerScenario(scenarioNum: number) {
-    if (!selectedId) return;
-    if (scenarioNum === 1) {
-      // Scenario 1: One lane FREE, one CONGESTED
-      const s = { north: 4, south: 28, east: 7, west: 2 };
-      setSliders(s);
-      await run(async () => {
-        await api.setSignalMode(selectedId, "ADAPTIVE");
-        await api.setSimulationTraffic(selectedId, s);
-      }, "Scenario 1 (One FREE, One CONGESTED: SOUTH=28, WEST=2)");
-    } else if (scenarioNum === 2) {
-      // Scenario 2: Traffic shifts dynamically to EAST
-      const s = { north: 3, south: 4, east: 29, west: 2 };
-      setSliders(s);
-      await run(async () => {
-        await api.setSimulationTraffic(selectedId, s);
-      }, "Scenario 2 (Dynamic Shift: EAST surges to 29)");
-    } else if (scenarioNum === 3) {
-      // Scenario 3: Balanced adaptive cycling
-      const s = { north: 15, south: 16, east: 14, west: 13 };
-      setSliders(s);
-      await run(async () => {
-        await api.setSignalMode(selectedId, "ADAPTIVE");
-        await api.setSimulationTraffic(selectedId, s);
-      }, "Scenario 3 (Adaptive Signal Cycling: Balanced Pressure)");
-    } else if (scenarioNum === 4) {
-      // Scenario 4: Ambulance priority detected on WEST
-      await run(async () => {
-        await api.spawnAmbulance(selectedId, "WEST");
-      }, "Scenario 4 (Ambulance Detected on WEST -> Priority Request)");
-    } else if (scenarioNum === 5) {
-      // Scenario 5: Helmet violation detected on EAST
-      await run(async () => {
-        await api.spawnHelmetViolation(selectedId, "EAST");
-      }, "Scenario 5 (Helmet Violation Detected on EAST)");
-    } else if (scenarioNum === 6) {
-      // Scenario 6: Fixed vs Adaptive comparison
-      const targetMode = mode === "FIXED" ? "ADAPTIVE" : "FIXED";
-      setMode(targetMode);
-      await run(async () => {
-        await api.setSignalMode(selectedId, targetMode);
-      }, `Scenario 6 (Switched to ${targetMode} Mode)`);
-    }
-  }
+  const simulation = snapshot?.simulation;
+  const selectedCase = SIMULATION_CASES.find(c => c.id === simulation?.scenario);
+  const connected = status === "CONNECTED" && Boolean(snapshot?.signal) && now - receivedAt < 2000;
+  const paused = simulation?.paused ?? false;
+  const speed = simulation?.speed ?? 1;
+  const signal = snapshot?.signal;
+  const elapsed = connected && !paused ? Math.max(0, now - receivedAt) / 1000 * speed : 0;
+  const remaining = signal ? Math.ceil(Math.max(0, signal.countdown_s - elapsed)) : null;
+  const activePair = signal?.active_direction === "NS" ? "North + South" : "East + West";
+  const nextPair = signal?.target_direction === "NS" ? "North + South" : "East + West";
+  const priority = snapshot?.emergency?.flashing_lights_confirmed && snapshot.emergency.state === "PRIORITY_ACTIVE";
+  const phaseText = !connected ? "Waiting for simulation" : paused ? "Simulation paused" : signal?.state === "YELLOW" ? `${activePair} is turning yellow` : `${activePair} has green`;
+  const countdownText = priority ? "Priority" : remaining === null ? "—" : `${remaining}s`;
+  const ready = Boolean(simulation) && connected && !busy;
 
-  if (!selectedId) return <div className="text-sm text-text-muted">Select an intersection first.</div>;
-
-  return (
-    <div className="space-y-6 max-w-4xl">
+  return <div className="mx-auto max-w-[1680px] space-y-4 pb-4">
+    <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <div className="text-xl font-bold text-text-primary">Traffic Simulator &amp; Control Console</div>
-        <div className="text-xs text-text-muted mt-1">
-          Mutates the backend&apos;s real scenario state (VehicleScripts). Every parameter flows through the full
-          causal pipeline: Detector &rarr; Tracker &rarr; Lane Assigner &rarr; Lane Intelligence &rarr; Decision Engine &rarr; Signal FSM.
-        </div>
+        <div className="mb-1.5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-accent"><span className="h-1.5 w-1.5 rounded-full bg-accent" /> Learn by exploring</div>
+        <h1 className="text-2xl font-semibold tracking-tight text-text-primary sm:text-[28px]">Traffic playground</h1>
+        <p className="mt-1 text-xs text-text-secondary sm:text-sm">One intersection. Four directions. See why the lights change.</p>
       </div>
-
-      {!canControl && (
-        <div className="text-xs text-status-moderate bg-status-moderate/10 border border-status-moderate/30 rounded-lg px-3 py-2">
-          Your role ({role}) is read-only for controls. Sign in as TRAFFIC_OPERATOR or ADMIN to modify live simulation.
-        </div>
-      )}
-
-      {/* Section 46: Judge Demo Scenarios */}
-      <div className="card p-5 border-accent/40 bg-accent/5 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-bold text-accent tracking-wide uppercase">Judge Demo Scenarios</div>
-          <span className="text-[11px] font-medium bg-accent/20 text-accent px-2 py-0.5 rounded">6 Scenarios</span>
-        </div>
-        <div className="text-xs text-text-secondary leading-relaxed">
-          One-click evaluation scenarios executing the complete end-to-end backend causal chain:
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
-          <button
-            disabled={!canControl || busy}
-            onClick={() => triggerScenario(1)}
-            className="text-left p-3 rounded-lg border border-surface-border bg-surface-card hover:border-accent/60 transition-all text-xs disabled:opacity-50"
-          >
-            <div className="font-semibold text-text-primary">Scenario 1: Lane Congestion</div>
-            <div className="text-[11px] text-text-muted mt-1">SOUTH=28 (Congested) vs WEST=2 (Free). Demonstrates explainable free-lane detection.</div>
-          </button>
-          <button
-            disabled={!canControl || busy}
-            onClick={() => triggerScenario(2)}
-            className="text-left p-3 rounded-lg border border-surface-border bg-surface-card hover:border-accent/60 transition-all text-xs disabled:opacity-50"
-          >
-            <div className="font-semibold text-text-primary">Scenario 2: Traffic Shift</div>
-            <div className="text-[11px] text-text-muted mt-1">Congestion shifts dynamically to EAST=29. Decision engine re-ranks in real-time.</div>
-          </button>
-          <button
-            disabled={!canControl || busy}
-            onClick={() => triggerScenario(3)}
-            className="text-left p-3 rounded-lg border border-surface-border bg-surface-card hover:border-accent/60 transition-all text-xs disabled:opacity-50"
-          >
-            <div className="font-semibold text-text-primary">Scenario 3: Adaptive Cycling</div>
-            <div className="text-[11px] text-text-muted mt-1">Dynamic green duration calculated from waiting time, queue, and fairness.</div>
-          </button>
-          <button
-            disabled={!canControl || busy}
-            onClick={() => triggerScenario(4)}
-            className="text-left p-3 rounded-lg border border-surface-border bg-surface-card hover:border-accent/60 transition-all text-xs disabled:opacity-50"
-          >
-            <div className="font-semibold text-text-primary">Scenario 4: Ambulance Dispatch</div>
-            <div className="text-[11px] text-text-muted mt-1">Approaching WEST ambulance &rarr; Temporal confirmation &rarr; Safe green clearance.</div>
-          </button>
-          <button
-            disabled={!canControl || busy}
-            onClick={() => triggerScenario(5)}
-            className="text-left p-3 rounded-lg border border-surface-border bg-surface-card hover:border-accent/60 transition-all text-xs disabled:opacity-50"
-          >
-            <div className="font-semibold text-text-primary">Scenario 5: Safety Violation</div>
-            <div className="text-[11px] text-text-muted mt-1">No-helmet motorcycle on EAST. Violations logged without affecting signal timing.</div>
-          </button>
-          <button
-            disabled={!canControl || busy}
-            onClick={() => triggerScenario(6)}
-            className="text-left p-3 rounded-lg border border-surface-border bg-surface-card hover:border-accent/60 transition-all text-xs disabled:opacity-50"
-          >
-            <div className="font-semibold text-text-primary">Scenario 6: Fixed vs Adaptive</div>
-            <div className="text-[11px] text-text-muted mt-1">Compare rigid 30s fixed cycle against real-time AI pressure allocation.</div>
-          </button>
-        </div>
-      </div>
-
-      {/* Traffic Sliders */}
-      <div className="card p-4 space-y-4">
-        <div className="text-sm font-semibold text-text-primary">Per-Direction Traffic Volume Sliders</div>
-        {DIRECTIONS.map((dir) => {
-          const key = dir.toLowerCase() as keyof typeof sliders;
-          return (
-            <div key={dir} className="flex items-center gap-3">
-              <span className="w-14 text-xs font-medium text-text-secondary">{dir}</span>
-              <input
-                type="range"
-                min={0}
-                max={35}
-                value={sliders[key]}
-                disabled={!canControl}
-                onChange={(e) => setSliders((s) => ({ ...s, [key]: Number(e.target.value) }))}
-                className="flex-1 accent-accent cursor-pointer"
-              />
-              <span className="w-10 text-xs font-bold text-text-primary tabular-nums text-right">{sliders[key]}</span>
-            </div>
-          );
-        })}
-        <div className="flex gap-2">
-          <button
-            disabled={!canControl || busy}
-            onClick={() => run(() => api.setSimulationTraffic(selectedId, sliders), "Apply traffic sliders")}
-            className="text-xs px-4 py-2 rounded-lg bg-accent text-white font-medium hover:bg-accent/90 disabled:opacity-50 transition-colors"
-          >
-            Apply Volume to Backend
-          </button>
-          <button
-            disabled={!canControl || busy}
-            onClick={() => {
-              const reset = { north: 10, south: 10, east: 10, west: 10 };
-              setSliders(reset);
-              run(() => api.setSimulationTraffic(selectedId, reset), "Reset volume to baseline (10)");
-            }}
-            className="text-xs px-3 py-2 rounded-lg border border-surface-border text-text-secondary hover:bg-surface-card disabled:opacity-50"
-          >
-            Set All to 10
-          </button>
-        </div>
-      </div>
-
-      {/* Emergency & Safety Triggers */}
-      <div className="card p-4 space-y-3">
-        <div className="text-sm font-semibold text-text-primary">Emergency &amp; Road Safety Controls</div>
-        <div>
-          <div className="text-xs text-text-muted mb-1.5">Spawn Approaching Ambulance:</div>
-          <div className="flex flex-wrap gap-2">
-            {DIRECTIONS.map((dir) => (
-              <button
-                key={dir}
-                disabled={!canControl || busy}
-                onClick={() => run(() => api.spawnAmbulance(selectedId, dir), `Spawn ambulance (${dir})`)}
-                className="text-xs px-3 py-2 rounded-lg border border-surface-border bg-surface-card text-text-primary hover:border-status-emergency/60 disabled:opacity-50"
-              >
-                Ambulance &middot; {dir}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <div className="text-xs text-text-muted mb-1.5">Spawn Motorcycle Helmet Violation:</div>
-          <div className="flex flex-wrap gap-2">
-            {DIRECTIONS.map((dir) => (
-              <button
-                key={dir}
-                disabled={!canControl || busy}
-                onClick={() => run(() => api.spawnHelmetViolation(selectedId, dir), `Helmet violation (${dir})`)}
-                className="text-xs px-3 py-2 rounded-lg border border-surface-border bg-surface-card text-text-primary hover:border-status-moderate/60 disabled:opacity-50"
-              >
-                No Helmet &middot; {dir}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="pt-2">
-          <button
-            disabled={!canControl || busy}
-            onClick={() => run(() => api.resetSimulation(selectedId), "Reset simulation")}
-            className="text-xs px-3 py-2 rounded-lg border border-status-congested/40 text-status-congested hover:bg-status-congested/10 disabled:opacity-50"
-          >
-            Reset Simulation State
-          </button>
-        </div>
-      </div>
-
-      {/* Police / Operator Override (Spec Section 24) */}
-      <div className="card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold text-text-primary">Police / Operator Manual Override</div>
-          <span className="text-[10px] text-text-muted uppercase tracking-wider font-semibold">Section 24 Compliant</span>
-        </div>
-        <div className="text-xs text-text-muted">
-          Allows an authorized traffic officer to force phase selection, pause adaptive cycling, or resume AI control. All overrides are logged with audit timestamps.
-        </div>
-
-        <div className="flex items-center gap-2 pt-1">
-          <input
-            type="text"
-            value={operatorNote}
-            onChange={(e) => setOperatorNote(e.target.value)}
-            placeholder="Operator override reason..."
-            className="flex-1 bg-surface-card border border-surface-border rounded-lg text-xs px-3 py-2 text-text-primary"
-          />
-        </div>
-
-        <div>
-          <div className="text-xs text-text-muted mb-1.5">Force Phase Direction (Safe Transition Enforced):</div>
-          <div className="flex flex-wrap gap-2">
-            {DIRECTIONS.map((dir) => (
-              <button
-                key={dir}
-                disabled={!canControl || busy}
-                onClick={() => run(() => api.overrideSignal(selectedId, dir, operatorNote), `Override to ${dir}`)}
-                className="text-xs px-3 py-1.5 rounded-lg border border-accent/40 bg-accent/10 text-accent font-medium hover:bg-accent/20 disabled:opacity-50"
-              >
-                Force {dir} Green
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex gap-2 pt-1">
-          <button
-            disabled={!canControl || busy}
-            onClick={() => {
-              setMode("MANUAL");
-              run(() => api.setSignalMode(selectedId, "MANUAL"), "Pause adaptive control (Hold Current Phase)");
-            }}
-            className="text-xs px-3 py-1.5 rounded-lg border border-surface-border text-status-moderate hover:bg-status-moderate/10 disabled:opacity-50"
-          >
-            Pause Adaptive Control
-          </button>
-          <button
-            disabled={!canControl || busy}
-            onClick={() => {
-              setMode("ADAPTIVE");
-              run(() => api.setSignalMode(selectedId, "ADAPTIVE"), "Resume adaptive AI control");
-            }}
-            className="text-xs px-3 py-1.5 rounded-lg border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-50"
-          >
-            Resume Adaptive Control
-          </button>
-          <button
-            disabled={!canControl || busy}
-            onClick={() => {
-              setMode("FIXED");
-              run(() => api.setSignalMode(selectedId, "FIXED"), "Switch to FIXED 30s cycle");
-            }}
-            className="text-xs px-3 py-1.5 rounded-lg border border-surface-border text-text-secondary hover:bg-surface-card disabled:opacity-50"
-          >
-            Set Fixed Timing (30s)
-          </button>
-        </div>
-
-        <div className="text-xs text-text-muted pt-1">
-          Active Mode: <span className="text-text-primary font-semibold">{payload?.signal?.mode ?? mode}</span> &middot; Signal:{" "}
-          <span className="text-text-primary font-semibold">{payload?.signal?.active_direction ?? "--"} ({payload?.signal?.state ?? "--"})</span>
-        </div>
-      </div>
-
-      {message && (
-        <div className="text-xs text-text-primary p-3 rounded-lg bg-surface-raised border border-accent/30 flex items-center gap-2">
-          <span className="status-dot bg-accent" />
-          <span>{message}</span>
-        </div>
-      )}
+      <div className="rounded-full border border-accent/25 bg-accent/10 px-3 py-1.5 text-[11px] font-medium text-accent">Separate simulation lab</div>
     </div>
-  );
+    {error && <div role="alert" className="rounded-xl border border-status-congested/30 bg-status-congested/10 px-4 py-3 text-sm text-status-congested">{error}</div>}
+    {status !== "CONNECTED" && <div role="status" className="rounded-xl border border-status-moderate/30 bg-status-moderate/10 px-4 py-2 text-xs text-status-moderate">{status === "CONNECTING" ? "Connecting to the simulation controller…" : "Simulation connection interrupted. Cars are paused until it reconnects."}</div>}
+    <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="min-w-0 space-y-3">
+        <section className="card overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-3">
+            <div className="flex items-center gap-2"><span className="rounded-md bg-accent/10 px-2 py-1 text-[10px] font-bold tracking-wider text-accent">3D</span><h2 className="text-sm font-semibold text-text-primary">{simulation?.label ?? "Four-way intersection"}</h2></div>
+            <div className="inline-flex rounded-lg border border-surface-border bg-surface-panel p-0.5">
+              {(["perspective", "overhead"] as const).map(v => <button key={v} onClick={() => setView(v)} aria-pressed={view === v} className={`rounded-md px-2.5 py-1 text-[11px] font-medium ${view === v ? "bg-surface-elevated text-text-primary shadow-sm" : "text-text-muted hover:text-text-primary"}`}>{v === "perspective" ? "3D view" : "Top view"}</button>)}
+              <button onClick={() => setResetView(v => v + 1)} title="Reset camera position" aria-label="Reset camera position" className="rounded-md px-2 text-text-muted hover:text-text-primary"><ControlIcon name="reset" /></button>
+            </div>
+          </div>
+          <div className="relative">
+            <IntersectionScene snapshot={snapshot} running={connected} view={view} resetView={resetView} />
+            <div className="pointer-events-none absolute left-3 top-3 rounded-xl border border-white/70 bg-white/90 px-3 py-2 text-[11px] text-slate-600 shadow-sm"><div className="font-semibold text-slate-800">Drag to orbit</div><div className="mt-0.5">Scroll or pinch to zoom</div></div>
+            <div className="pointer-events-none absolute bottom-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2">
+              <span className="rounded-lg border border-white/70 bg-white/90 px-3 py-2 text-[11px] font-medium text-slate-700">E + W move together · N + S move together</span>
+              <span className="rounded-lg border border-white/70 bg-white/90 px-3 py-2 font-mono text-[11px] text-slate-700">{paused ? "PAUSED" : `${speed}× simulation time`}</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <button disabled={!ready} onClick={() => run(() => api.controlSimulation({ paused: !paused }))} className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"><ControlIcon name={paused ? "play" : "pause"} />{paused ? "Play" : "Pause"}</button>
+              <button disabled={!ready} onClick={() => run(() => api.setSimulationScenario(simulation!.scenario))} className="flex items-center gap-1.5 rounded-lg border border-surface-border bg-surface-panel px-3 py-2 text-xs text-text-secondary disabled:opacity-40"><ControlIcon name="reset" />Restart case</button>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-text-secondary">Speed<select aria-label="Simulation speed" value={speed} disabled={!ready} onChange={e => run(() => api.controlSimulation({ speed: Number(e.target.value) as SimulationSpeed }))} className="rounded-lg border border-surface-border bg-surface-panel px-2 py-1.5 text-xs text-text-primary disabled:opacity-40">{[1,2,5,10].map(s => <option key={s} value={s}>{s}×</option>)}</select></label>
+          </div>
+        </section>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {(["EW", "NS"] as const).map(pair => {
+            const color = signal?.directions[pair === "EW" ? "EAST" : "NORTH"];
+            const current = signal?.active_direction === pair;
+            const score = snapshot?.demand?.pair_scores[pair];
+            const style = color === "GREEN" ? "text-status-free border-status-free/25 bg-status-free/10" : color === "YELLOW" ? "text-status-moderate border-status-moderate/25 bg-status-moderate/10" : "text-status-congested border-status-congested/20 bg-status-congested/5";
+            return <div key={pair} className={`rounded-xl border px-4 py-3 ${connected ? style : "border-surface-border bg-surface-card text-text-muted"}`}>
+              <div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold">{pair === "EW" ? "East + West" : "North + South"}</span><span className="text-[10px] font-bold tracking-wider">{connected ? color : "OFFLINE"}</span></div>
+              <div className="mt-2 flex items-baseline justify-between gap-2"><span className="text-2xl font-semibold tabular-nums">{typeof score === "number" ? score : "—"}<span className="ml-1.5 text-[10px] font-normal opacity-70">average score</span></span><span className="font-mono text-sm font-semibold">{current && connected ? countdownText : "Wait"}</span></div>
+            </div>;
+          })}
+        </div>
+        <p className="px-1 text-[11px] leading-relaxed text-text-muted">Scenario arrivals are replenished to hold demand steady. This miniature is illustrative; the camera dashboard uses actual video and calibrated counting areas.</p>
+      </div>
+      <aside className="space-y-3">
+        <section className="card p-4">
+          <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold text-text-primary">Choose a traffic case</h2><span className="text-[10px] text-text-muted">5 cases</span></div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+            {SIMULATION_CASES.map((c, index) => <button key={c.id} disabled={busy || status !== "CONNECTED"} onClick={() => run(() => api.setSimulationScenario(c.id))} aria-pressed={simulation?.scenario === c.id} className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors disabled:opacity-40 ${simulation?.scenario === c.id ? "border-accent/50 bg-accent/10" : "border-surface-border bg-surface-panel hover:border-accent/40"}`}>
+              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[11px] font-semibold ${simulation?.scenario === c.id ? "bg-accent text-white" : "bg-surface-elevated text-text-muted"}`}>{index + 1}</span>
+              <span><span className="block text-xs font-semibold text-text-primary">{c.title}</span><span className="mt-1 block text-[10px] text-text-muted">{c.description}</span></span>
+            </button>)}
+          </div>
+        </section>
+        <section className="card p-4" aria-live="polite">
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-accent">What is happening?</div>
+          <h2 className="mt-2 text-sm font-semibold text-text-primary">{phaseText}</h2>
+          <p className="mt-2 text-xs leading-relaxed text-text-secondary">{signal?.state === "YELLOW" ? `${nextPair} stays red while the outgoing traffic clears. Green follows after the complete 3-second yellow interval.` : priority ? "Flashing ambulance lights are confirmed. Its pair holds green until emergency priority clears." : selectedCase?.lesson ?? "Choose a case to see the signal rules in action."}</p>
+          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-surface-border pt-3 text-[10px] text-text-muted"><span>Green <strong className="text-text-secondary">70s</strong></span><span>Yellow <strong className="text-text-secondary">3s</strong></span><span>Score gap <strong className="text-text-secondary">20+</strong></span><span>Almost empty <strong className="text-text-secondary">≤ 5</strong></span></div>
+        </section>
+        <section className="card p-4">
+          <h2 className="text-xs font-semibold text-text-primary">Try an ambulance</h2>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-text-muted">Priority requires an ambulance with flashing emergency lights.</p>
+          <label className="mt-3 flex items-center justify-between gap-2 text-[11px] text-text-secondary">Approach<select aria-label="Ambulance approach" value={ambulanceDirection} onChange={e => setAmbulanceDirection(e.target.value as SimulationDirection)} className="rounded-lg border border-surface-border bg-surface-panel px-2 py-1.5 text-text-primary">{["NORTH", "SOUTH", "EAST", "WEST"].map(d => <option key={d} value={d}>{d.charAt(0) + d.slice(1).toLowerCase()}</option>)}</select></label>
+          <div className="mt-2 grid grid-cols-2 gap-2"><button disabled={!ready} onClick={() => run(() => api.simulationAmbulance(ambulanceDirection, true))} className="rounded-lg border border-status-info/30 bg-status-info/10 px-2 py-2 text-[11px] font-semibold text-status-info disabled:opacity-40">Lights on</button><button disabled={!ready} onClick={() => run(() => api.simulationAmbulance(ambulanceDirection, false))} className="rounded-lg border border-surface-border bg-surface-panel px-2 py-2 text-[11px] text-text-secondary disabled:opacity-40">Lights off</button></div>
+        </section>
+      </aside>
+    </div>
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-surface-border bg-surface-panel px-4 py-3 text-[11px] text-text-muted"><span className="font-semibold text-text-secondary">How scores work</span><span>Car <strong className="text-text-primary">2</strong></span><span>Auto / rickshaw <strong className="text-text-primary">1.5</strong></span><span>Two-wheeler <strong className="text-text-primary">1</strong></span><span>Pair score = average of its two directions</span></div>
+  </div>;
 }

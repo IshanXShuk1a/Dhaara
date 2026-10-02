@@ -1,77 +1,45 @@
 "use client";
-
+import Link from "next/link";
 import { useIntersections } from "@/lib/intersectionContext";
 import { useIntersectionSocket } from "@/lib/useIntersectionSocket";
-import { SingleFeedCameraCard } from "@/components/dashboard/SingleFeedCameraCard";
-import { TrafficStatusDonut } from "@/components/charts/TrafficStatusDonut";
-import { HourlyVolumeBar } from "@/components/charts/HourlyVolumeBar";
-import { GlowingActivityChart } from "@/components/charts/GlowingActivityChart";
-import { RightControlPanel } from "@/components/dashboard/RightControlPanel";
+import { MultiLaneQuadView } from "@/components/dashboard/MultiLaneQuadView";
 import { SignalCard } from "@/components/dashboard/SignalCard";
 import { DecisionCard } from "@/components/dashboard/DecisionCard";
-import { EventTimeline } from "@/components/dashboard/EventTimeline";
+import { ScoreRecords } from "@/components/dashboard/ScoreRecords";
 
 export default function DashboardPage() {
   const { selectedId, isLoading, error } = useIntersections();
   const { payload, status } = useIntersectionSocket(selectedId);
-
-  if (isLoading) {
-    return <div className="text-sm text-text-muted p-6">Loading intersections...</div>;
-  }
-  if (error) {
-    return <div className="text-sm text-status-congested p-6">Could not load intersections: {error}</div>;
-  }
-  if (!selectedId) {
-    return <div className="text-sm text-text-muted p-6">No intersections configured yet. Add one from the Intersections page.</div>;
-  }
-
-  return (
-    <div className="space-y-5">
-      {status === "DISCONNECTED" && (
-        <div className="text-xs text-status-congested bg-status-congested/10 border border-status-congested/30 rounded-2xl px-4 py-2.5">
-          Lost connection to the backend - retrying automatically. Values below may be stale.
-        </div>
-      )}
-
-      {/* Main Grid: 2 Columns matching the mockup's Center Canvas + Right Messages/Mentors Panel */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
-        {/* CENTER MAIN COLUMN (Width 8.5 / 12 on XL) */}
-        <div className="xl:col-span-8 space-y-5">
-          {/* Row 1: Single High-Definition Live Camera Feed (Reverted from 4-cam to 1-cam feed) */}
-          <div>
-            <SingleFeedCameraCard intersectionId={selectedId} payload={payload} wsStatus={status} />
-          </div>
-
-          {/* Row 2: Two Stat Cards matching Course Statistics (Donut) & Study Hours (Bar) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <TrafficStatusDonut payload={payload} />
-            <HourlyVolumeBar payload={payload} />
-          </div>
-
-          {/* Row 3: Glowing Neon Area Chart matching Activity from mockup */}
-          <div>
-            <GlowingActivityChart payload={payload} />
-          </div>
-
-          {/* Row 4: Signal Hardware State Machine & AI Decision Explanation */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <SignalCard payload={payload} />
-            <DecisionCard payload={payload} />
-          </div>
-
-          {/* Row 5: Event Timeline Audit Log */}
-          <div>
-            <EventTimeline intersectionId={selectedId} />
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN (Width 3.5 / 12 on XL) matching Messages & Mentors panel */}
-        <div className="xl:col-span-4">
-          <div className="sticky top-20">
-            <RightControlPanel payload={payload} />
-          </div>
-        </div>
+  if (isLoading) return <div className="text-sm text-text-muted p-6">Loading intersections...</div>;
+  if (error) return <div className="text-sm text-status-congested p-6">Could not load intersections: {error}</div>;
+  if (!selectedId) return <div className="text-sm text-text-muted p-6">No intersection configured.</div>;
+  const current = payload?.intersection_id === selectedId ? payload : null;
+  const measured = current?.is_simulated ? null : current;
+  const online = measured?.cameras ? Object.values(measured.cameras).filter(camera => camera.status === "ONLINE").length : null;
+  return <div className="space-y-4">
+    <div className="flex flex-wrap justify-between items-center gap-2">
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight text-text-primary">Intersection overview</h1>
+        <p className="mt-0.5 text-xs text-text-muted">Four camera feeds · East / West and North / South control</p>
+      </div>
+      <div className="flex items-center gap-2 rounded-full border border-surface-border bg-surface-card px-3 py-1.5 text-xs text-text-secondary">
+        <span className={`h-1.5 w-1.5 rounded-full ${status === "CONNECTED" && online ? "bg-status-free" : "bg-status-moderate"}`} />
+        {online !== null ? `${online} / 4 cameras online` : "Connecting cameras"}
       </div>
     </div>
-  );
+    {(status === "DISCONNECTED" || status === "STALE") && <div role="status" className="text-xs text-status-moderate border border-status-moderate/30 bg-status-moderate/5 rounded-xl px-3 py-2">
+      {status === "STALE" ? "Camera state has stopped updating." : "Backend disconnected."} Displayed values may be stale.
+    </div>}
+    {current?.is_simulated && <div role="status" className="text-xs text-status-moderate border border-status-moderate/30 rounded-xl px-3 py-2">
+      Synthetic inputs are unavailable in the camera dashboard. <Link href="/simulation" className="underline font-semibold">Open the Simulation lab.</Link>
+    </div>}
+    <div className="grid min-w-0 grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <MultiLaneQuadView intersectionId={selectedId} payload={current} wsStatus={status} />
+      <aside className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-1" aria-label="Signal control and traffic demand">
+        <SignalCard payload={measured} compact />
+        <DecisionCard payload={measured} />
+      </aside>
+    </div>
+    <ScoreRecords intersectionId={selectedId} payload={measured} />
+  </div>;
 }

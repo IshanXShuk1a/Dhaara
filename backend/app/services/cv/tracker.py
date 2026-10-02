@@ -50,6 +50,7 @@ class Track:
     first_seen_frame: int
     last_seen_frame: int
     missed_frames: int = 0
+    detection_center: tuple[float, float] | None = None
     # position history used for speed/waiting-time estimation downstream
     positions: list[tuple[float, float]] = field(default_factory=list)
 
@@ -82,11 +83,14 @@ class CentroidIoUTracker:
         iou_threshold: float = 0.3,
         max_centroid_distance_px: float = 80.0,
         max_missed_frames: int = 10,
+        id_start: int = 1,
+        id_step: int = 1,
     ):
         self._iou_threshold = iou_threshold
         self._max_centroid_distance_px = max_centroid_distance_px
         self._max_missed_frames = max_missed_frames
-        self._id_counter = count(1)
+        self._id_start, self._id_step = id_start, id_step
+        self._id_counter = count(id_start, id_step)
         self._tracks: dict[int, Track] = {}
         self._frame_index = 0
 
@@ -94,8 +98,9 @@ class CentroidIoUTracker:
     def active_tracks(self) -> list[Track]:
         return [t for t in self._tracks.values() if t.missed_frames == 0]
 
-    def reset(self) -> None:
-        self._id_counter = count(1)
+    def reset(self, preserve_ids: bool = False) -> None:
+        if not preserve_ids:
+            self._id_counter = count(self._id_start, self._id_step)
         self._tracks = {}
         self._frame_index = 0
 
@@ -165,6 +170,7 @@ class CentroidIoUTracker:
                 class_name=det.class_name,
                 bbox=det.bbox,
                 center=det.center,
+                detection_center=det.center,
                 previous_center=None,
                 confidence=det.confidence,
                 first_seen_frame=self._frame_index,
@@ -195,6 +201,8 @@ class CentroidIoUTracker:
         if det.class_name == "ambulance" or det.confidence > track.confidence:
             track.class_name = det.class_name
         track.confidence = max(track.confidence * 0.88, det.confidence)
+        # ROI membership uses the current detection, independent of display smoothing.
+        track.detection_center = det.center
         track.last_seen_frame = self._frame_index
         track.missed_frames = 0
         track.positions.append(track.center)

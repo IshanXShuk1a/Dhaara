@@ -6,13 +6,8 @@ Owns the emergency-priority lifecycle for one intersection:
     NONE -> DETECTED -> CONFIRMED -> PRIORITY_REQUESTED -> PRIORITY_ACTIVE
          -> PASSED -> RESOLVED -> (back to) NONE
 
-It does not directly touch the SignalFSM; instead it exposes
-`emergency_direction` which TrafficDecisionEngine consumes as an override
-input, and the caller (IntersectionController) is responsible for feeding
-that into the decision engine and then into SignalFSM.request_phase_change
-via the normal safe-transition path (GREEN -> YELLOW -> ALL_RED -> GREEN).
-Emergency priority therefore can never itself cause an unsafe GREEN->GREEN
-jump - it merely picks the target direction earlier and skips fairness.
+Priority is requested by the controller only after ambulance identity and
+temporal flashing-light evidence have both been confirmed.
 """
 from __future__ import annotations
 
@@ -56,7 +51,7 @@ class EmergencyManager:
 
     @property
     def emergency_direction(self) -> str | None:
-        """What TrafficDecisionEngine should treat as the forced-priority direction."""
+        """Direction of the confirmed emergency, for telemetry."""
         if self.state in (EmergencyState.PRIORITY_REQUESTED, EmergencyState.PRIORITY_ACTIVE):
             return self.active_direction
         return None
@@ -91,7 +86,7 @@ class EmergencyManager:
     def observe_tick(self, still_present: bool, timestamp: float) -> None:
         """Call once per control loop tick while PRIORITY_ACTIVE with whether the
         ambulance track is still being observed near/through the intersection."""
-        if self.state != EmergencyState.PRIORITY_ACTIVE:
+        if self.state not in (EmergencyState.PRIORITY_ACTIVE, EmergencyState.PRIORITY_REQUESTED):
             return
         if still_present:
             self._missed_ticks = 0
