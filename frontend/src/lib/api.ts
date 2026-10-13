@@ -145,6 +145,11 @@ export const api = {
   videoStatus: (intersectionId: string) => request(`/api/video/status`, { params: { intersection_id: intersectionId } }),
 
   getSimulation: () => request<import("./simulation").SimulationSnapshot>("/api/simulation/state"),
+  getImageDemo: () => request<import("./types").IntersectionWsPayload>("/api/image-demo"),
+  selectImageCase: (caseId: import("./types").ImageCaseId, swapped = false) =>
+    request<import("./types").IntersectionWsPayload>("/api/image-demo/case", { method: "POST", body: {case_id: caseId, swapped} }),
+  controlImageDemo: (control: {paused?: boolean; speed?: 1 | 2 | 5 | 10; auto_tour?: boolean; lights_active?: boolean}) =>
+    request<import("./types").IntersectionWsPayload>("/api/image-demo/control", {method: "POST", body: control}),
   setSimulationScenario: (scenario: import("./simulation").SimulationScenario) =>
     request<import("./simulation").SimulationSnapshot>("/api/simulation/scenario", { method: "POST", body: { scenario } }),
   controlSimulation: (control: { paused?: boolean; speed?: import("./simulation").SimulationSpeed }) =>

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useIntersectionSocket } from "@/lib/useIntersectionSocket";
 import { SIMULATION_CASES, SIMULATION_ID, type SimulationDirection, type SimulationSnapshot, type SimulationSpeed } from "@/lib/simulation";
+import type { SceneLighting } from "@/components/simulation/sceneVisuals";
 
 const IntersectionScene = dynamic(() => import("@/components/simulation/IntersectionScene"), {
   ssr: false, loading: () => <div className="flex h-[440px] items-center justify-center bg-[#dce7f0] text-sm text-slate-600">Preparing the 3D intersection…</div>,
@@ -22,6 +23,7 @@ export default function SimulationPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"perspective" | "overhead">("perspective");
+  const [lighting, setLighting] = useState<SceneLighting>("sunset");
   const [resetView, setResetView] = useState(0);
   const [ambulanceDirection, setAmbulanceDirection] = useState<SimulationDirection>("NORTH");
   const [now, setNow] = useState(Date.now());
@@ -36,7 +38,7 @@ export default function SimulationPage() {
   useEffect(() => {
     if (!payload) return;
     const incoming = payload as SimulationSnapshot;
-    setSnapshot(current => current?.simulation && incoming.simulation && incoming.simulation.run_id < current.simulation.run_id ? current : incoming);
+    setSnapshot(current => current?.simulation && incoming.simulation && incoming.simulation.session_id === current.simulation.session_id && incoming.simulation.run_id < current.simulation.run_id ? current : incoming);
     setReceivedAt(lastUpdate ?? Date.now());
   }, [payload, lastUpdate]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 100); return () => window.clearInterval(timer); }, []);
@@ -68,7 +70,7 @@ export default function SimulationPage() {
       <div>
         <div className="mb-1.5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-accent"><span className="h-1.5 w-1.5 rounded-full bg-accent" /> Learn by exploring</div>
         <h1 className="text-2xl font-semibold tracking-tight text-text-primary sm:text-[28px]">Traffic playground</h1>
-        <p className="mt-1 text-xs text-text-secondary sm:text-sm">One intersection. Four directions. See why the lights change.</p>
+        <p className="mt-1 text-xs text-text-secondary sm:text-sm">Explore a city intersection. Follow the traffic. See why the lights change.</p>
       </div>
       <div className="rounded-full border border-accent/25 bg-accent/10 px-3 py-1.5 text-[11px] font-medium text-accent">Separate simulation lab</div>
     </div>
@@ -76,20 +78,25 @@ export default function SimulationPage() {
     {status !== "CONNECTED" && <div role="status" className="rounded-xl border border-status-moderate/30 bg-status-moderate/10 px-4 py-2 text-xs text-status-moderate">{status === "CONNECTING" ? "Connecting to the simulation controller…" : "Simulation connection interrupted. Cars are paused until it reconnects."}</div>}
     <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
       <div className="min-w-0 space-y-3">
-        <section className="card overflow-hidden">
+        <section className="card overflow-hidden !border-accent/20 shadow-[0_12px_48px_-20px_rgba(0,0,0,0.45)]">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-3">
             <div className="flex items-center gap-2"><span className="rounded-md bg-accent/10 px-2 py-1 text-[10px] font-bold tracking-wider text-accent">3D</span><h2 className="text-sm font-semibold text-text-primary">{simulation?.label ?? "Four-way intersection"}</h2></div>
+            <div className="flex flex-wrap items-center gap-2">
+            <div role="group" aria-label="Scene lighting" className="inline-flex rounded-lg border border-surface-border bg-surface-panel p-0.5">
+              {(["day", "sunset", "night"] as const).map(mode => <button key={mode} onClick={() => setLighting(mode)} aria-pressed={lighting === mode} className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${lighting === mode ? "bg-accent/15 text-accent" : "text-text-muted hover:text-text-primary"}`}>{mode === "day" ? "Daylight" : mode === "sunset" ? "Golden hour" : "Night"}</button>)}
+            </div>
             <div className="inline-flex rounded-lg border border-surface-border bg-surface-panel p-0.5">
               {(["perspective", "overhead"] as const).map(v => <button key={v} onClick={() => setView(v)} aria-pressed={view === v} className={`rounded-md px-2.5 py-1 text-[11px] font-medium ${view === v ? "bg-surface-elevated text-text-primary shadow-sm" : "text-text-muted hover:text-text-primary"}`}>{v === "perspective" ? "3D view" : "Top view"}</button>)}
               <button onClick={() => setResetView(v => v + 1)} title="Reset camera position" aria-label="Reset camera position" className="rounded-md px-2 text-text-muted hover:text-text-primary"><ControlIcon name="reset" /></button>
             </div>
+            </div>
           </div>
           <div className="relative">
-            <IntersectionScene snapshot={snapshot} running={connected} view={view} resetView={resetView} />
-            <div className="pointer-events-none absolute left-3 top-3 rounded-xl border border-white/70 bg-white/90 px-3 py-2 text-[11px] text-slate-600 shadow-sm"><div className="font-semibold text-slate-800">Drag to orbit</div><div className="mt-0.5">Scroll or pinch to zoom</div></div>
+            <IntersectionScene snapshot={snapshot} running={connected} view={view} resetView={resetView} lighting={lighting} />
+            <div className="pointer-events-none absolute left-3 top-3 rounded-xl border border-white/20 bg-slate-950/55 px-3 py-2 text-[11px] text-slate-300 shadow-lg backdrop-blur-md"><div className="font-semibold text-white">Explore the intersection</div><div className="mt-0.5">Drag to orbit · Scroll to zoom</div></div>
             <div className="pointer-events-none absolute bottom-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2">
-              <span className="rounded-lg border border-white/70 bg-white/90 px-3 py-2 text-[11px] font-medium text-slate-700">E + W move together · N + S move together</span>
-              <span className="rounded-lg border border-white/70 bg-white/90 px-3 py-2 font-mono text-[11px] text-slate-700">{paused ? "PAUSED" : `${speed}× simulation time`}</span>
+              <span className="rounded-lg border border-white/20 bg-slate-950/55 px-3 py-2 text-[11px] font-medium text-slate-200 backdrop-blur-md">E + W move together · N + S move together</span>
+              <span className="rounded-lg border border-white/20 bg-slate-950/55 px-3 py-2 font-mono text-[11px] text-slate-200 backdrop-blur-md">{paused ? "PAUSED" : `${speed}× simulation time`}</span>
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
@@ -112,7 +119,7 @@ export default function SimulationPage() {
             </div>;
           })}
         </div>
-        <p className="px-1 text-[11px] leading-relaxed text-text-muted">Scenario arrivals are replenished to hold demand steady. This miniature is illustrative; the camera dashboard uses actual video and calibrated counting areas.</p>
+        <p className="px-1 text-[11px] leading-relaxed text-text-muted">Scenario arrivals are replenished to hold demand steady. The city is illustrative; camera and image inputs remain separate.</p>
       </div>
       <aside className="space-y-3">
         <section className="card p-4">

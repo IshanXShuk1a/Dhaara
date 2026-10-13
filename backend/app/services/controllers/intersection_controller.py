@@ -128,7 +128,8 @@ class IntersectionController:
                                                   dt_seconds, detections.is_simulated)
         return self.last_snapshot
 
-    def process_frames(self, images: dict, frame_index: int, dt_seconds: float = .2, camera_statuses=None):
+    def process_frames(self, images: dict, frame_index: int, dt_seconds: float = .2, camera_statuses=None,
+                       demo_light_inputs: dict[str, bool] | None = None):
         timestamp = time.time()
         detections = self._detector.detect_many(images, frame_index)
         all_tracks, by_track, emergency_assignments, camera_vehicles, camera_lanes = [], {}, {}, {}, {}
@@ -159,7 +160,7 @@ class IntersectionController:
             by_track.update(assignments)
             emergency_assignments.update({t.track_id: replace(assignments[t.track_id], lane_id=direction, direction=direction)
                                           for t in tracks if t.class_name == "ambulance"})
-        self._process_emergency(all_tracks, emergency_assignments, timestamp, images)
+        self._process_emergency(all_tracks, emergency_assignments, timestamp, images, demo_light_inputs)
         metrics = self._compute_lane_metrics(all_tracks, by_track)
         snap = self._finish_snapshot(metrics, all_tracks, by_track, frame_index, timestamp,
                                      dt_seconds, any(r.is_simulated for r in detections.values()),
@@ -283,7 +284,7 @@ class IntersectionController:
                                        vehicle_score=score, vehicle_counts=counts)
         return metrics
 
-    def _process_emergency(self, tracks, assignment_by_track, timestamp: float, images) -> None:
+    def _process_emergency(self, tracks, assignment_by_track, timestamp: float, images, demo_light_inputs=None) -> None:
         visible_ids = set()
         self._ambulance_lights = {}
         for track in tracks:
@@ -294,6 +295,8 @@ class IntersectionController:
             visible_ids.add(track.track_id)
             lights_on = self._emergency_lights.observe(track.track_id, images[assignment.direction],
                                                        track.bbox, timestamp)
+            if demo_light_inputs is not None:
+                lights_on = demo_light_inputs.get(assignment.direction, False)
             self._ambulance_lights[track.track_id] = lights_on
             analyzer = self._camera_ambulance_analyzers.get(assignment.direction, self._ambulance_analyzer)
             candidate = analyzer.process(track, assignment, timestamp)

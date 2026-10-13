@@ -10,6 +10,8 @@ def client(tmp_path, monkeypatch):
     from sqlalchemy.orm import sessionmaker
     from app.database import database
     from app.main import app
+    from app.main import settings
+    monkeypatch.setattr(settings, "image_demo_enabled", False)
     from fastapi.testclient import TestClient
     test_engine = create_engine(f"sqlite:///{tmp_path / 'test.db'}", connect_args={"check_same_thread": False})
     monkeypatch.setattr(database, "engine", test_engine)

@@ -75,9 +75,20 @@ class AmbulanceDetector:
                         cv2.inRange(roof_crop, np.array([168, 100, 90], dtype=np.uint8), np.array([180, 255, 255], dtype=np.uint8)))
             roof_blue = cv2.inRange(roof_crop, np.array([95, 100, 90], dtype=np.uint8), np.array([135, 255, 255], dtype=np.uint8))
             roof_beacon_ratio = float(np.count_nonzero(roof_red | roof_blue)) / float(roof_crop.shape[0] * roof_crop.shape[1])
+            roof_colored_bright = (((roof_crop[:, :, 0] <= 12) | (roof_crop[:, :, 0] >= 168) |
+                                    ((roof_crop[:, :, 0] >= 95) & (roof_crop[:, :, 0] <= 135))) &
+                                   (roof_crop[:, :, 1] >= 110) & (roof_crop[:, :, 2] >= 200))
+            bright_beacon_ratio = float(np.mean(roof_colored_bright))
         else:
             roof_peak_ratio = 0.0
             roof_beacon_ratio = 0.0
+            bright_beacon_ratio = 0.0
+
+        # White bodywork plus a blue windscreen is common on ordinary cars.
+        # Require all three kinds of evidence, including a bright colored roof
+        # beacon. White reflections alone must never relabel every car.
+        if body_ratio <= 0.30 or marking_ratio <= 0.035 or bright_beacon_ratio < 0.015:
+            return (False, 0.0)
 
         # Characteristic ambulance profile: predominantly white/yellow body with emergency markings & roof beacon
         evidence_score = 0.0

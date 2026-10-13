@@ -7,6 +7,7 @@ export type SimulationSpeed = 1 | 2 | 5 | 10;
 
 export interface SimulationSnapshot extends IntersectionWsPayload {
   simulation?: {
+    session_id: string;
     scenario: SimulationScenario;
     label: string;
     targets: { north: number; south: number; east: number; west: number };

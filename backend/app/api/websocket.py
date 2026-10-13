@@ -43,6 +43,20 @@ class ConnectionManager:
 connection_manager = ConnectionManager()
 
 
+def runtime_to_payload(intersection_id: str, runtime) -> dict:
+    payload = snapshot_to_payload(intersection_id, runtime.controller)
+    if runtime.simulation_lab is not None:
+        payload["simulation"] = runtime.simulation_lab.metadata()
+    if runtime.image_demo is not None:
+        payload["input_mode"] = "IMAGE_DEMO"
+        payload["image_demo"] = runtime.image_demo.metadata(runtime)
+        if "emergency" in payload:
+            payload["emergency"]["light_confirmation_source"] = "DEMO_INPUT"
+            payload["emergency"]["demo_lights_active"] = runtime.image_demo.lights_active
+            payload["emergency"]["flashing_lights_confirmed"] = False
+    return payload
+
+
 def snapshot_to_payload(intersection_id: str, controller) -> dict:
     snapshot = controller.last_snapshot
     if snapshot is None:
@@ -60,6 +74,7 @@ def snapshot_to_payload(intersection_id: str, controller) -> dict:
             "target_direction": getattr(snapshot, "signal_target_direction", None),
             "countdown_s": snapshot.signal_countdown_s,
             "mode": getattr(snapshot, "signal_mode", "ADAPTIVE"),
+            "previous_phase": controller.signal_fsm.state.previous_phase,
             "directions": snapshot.direction_signals,
         },
         "decision": (
@@ -128,9 +143,7 @@ async def intersection_ws(websocket: WebSocket, intersection_id: str):
         # Send current state immediately on connect, then wait for the
         # background control loop to push further updates via broadcast().
         with runtime.lock:
-            payload = snapshot_to_payload(intersection_id, runtime.controller)
-            if runtime.simulation_lab is not None:
-                payload["simulation"] = runtime.simulation_lab.metadata()
+            payload = runtime_to_payload(intersection_id, runtime)
         await websocket.send_json(payload)
         while True:
             # We don't expect inbound messages, but awaiting receive lets us

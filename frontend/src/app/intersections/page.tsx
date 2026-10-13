@@ -25,9 +25,9 @@ export default function IntersectionsPage() {
     <div className="space-y-6 max-w-5xl">
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-xl font-bold text-text-primary">Regional Traffic Grid Intersections</div>
+          <div className="text-xl font-bold text-text-primary">Traffic inputs</div>
           <div className="text-xs text-text-muted mt-1">
-            DHAARA regional coordinator aggregates decentralized intersection nodes across the city network.
+            Choose the supplied-image demonstration or a configured camera intersection.
           </div>
         </div>
         <button
@@ -83,8 +83,8 @@ export default function IntersectionsPage() {
                     <div className="text-text-primary font-medium mt-0.5">ADAPTIVE</div>
                   </div>
                   <div>
-                    <div className="text-text-muted text-[11px]">Camera Source</div>
-                    <div className="text-text-primary font-medium mt-0.5">LIVE INGESTION</div>
+                    <div className="text-text-muted text-[11px]">Input source</div>
+                    <div className="text-text-primary font-medium mt-0.5">{intersection.input_mode === "IMAGE_DEMO" ? "SOURCE IMAGES" : "VIDEO INPUT"}</div>
                   </div>
                 </div>
               </div>
@@ -105,7 +105,7 @@ export default function IntersectionsPage() {
                   onClick={() => handleSelectAndOpen(intersection.id)}
                   className="text-xs px-3.5 py-1.5 rounded-lg bg-accent text-white font-medium hover:bg-accent/90 transition-colors flex items-center gap-1"
                 >
-                  <span>Open Live Dashboard</span>
+                  <span>Open Dashboard</span>
                   <span>&rarr;</span>
                 </button>
               </div>
@@ -116,10 +116,10 @@ export default function IntersectionsPage() {
 
       <div className="card p-4 bg-surface-card flex items-center justify-between text-xs">
         <div className="text-text-muted">
-          Showing <span className="font-semibold text-text-primary">{intersections.length}</span> synchronized regional intersection nodes.
+          Showing <span className="font-semibold text-text-primary">{intersections.length}</span> available traffic inputs.
         </div>
         <Link href="/" className="text-accent hover:underline font-medium">
-          Return to Live Dashboard &rarr;
+          Return to Dashboard &rarr;
         </Link>
       </div>
     </div>

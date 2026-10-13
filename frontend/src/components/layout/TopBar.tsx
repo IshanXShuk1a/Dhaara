@@ -16,7 +16,7 @@ export function TopBar() {
   const { payload, status } = useIntersectionSocket(simulation ? null : selectedId);
   const available = payload?.cameras ? Object.values(payload.cameras).filter(c => c.status === "ONLINE").length : 0;
   const connected = status === "CONNECTED";
-  const label = !selectedId ? "No intersection" : !connected ? status === "CONNECTING" ? "Connecting" : status === "STALE" ? "Data delayed" : "Disconnected" : payload?.is_simulated ? "Simulation data" : available ? `${available}/4 cameras online` : "No camera data";
+  const label = !selectedId ? "No intersection" : !connected ? status === "CONNECTING" ? "Connecting" : status === "STALE" ? "Data delayed" : "Disconnected" : payload?.is_simulated ? "Simulation data" : available ? `${available}/4 ${payload?.image_demo ? "image inputs" : "cameras online"}` : "No camera data";
 
   return (
     <header className="app-topbar flex h-[60px] shrink-0 items-center justify-between gap-3 border-b border-surface-border px-3 md:px-4">

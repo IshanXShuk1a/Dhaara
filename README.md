@@ -6,7 +6,7 @@ This document describes the current design and replaces earlier independent-dire
 
 East and West share one phase (EW); North and South share the other (NS). Both directions in the active pair are GREEN; the opposite pair is RED. Every change passes through a configurable yellow interval (default 3 seconds): the outgoing pair becomes YELLOW while the other stays RED, then the outgoing pair turns RED and the receiving pair becomes GREEN. One immutable signal state owns both paired outputs and the phase clock.
 
-Four independent videos are sampled repeatedly in one shared YOLO inference batch. Only current detections whose bounding-box centers lie inside their camera's measurement polygon contribute. Vehicles behind the far boundary and missed tracks do not count.
+For video inputs, four independent videos are sampled repeatedly in one shared YOLO inference batch. The image demonstration uses the four supplied photographs. Only current detections whose bounding-box centers lie inside their input's measurement polygon contribute. Vehicles behind the far boundary and missed tracks do not count.
 
 Per-direction score:
 
@@ -30,6 +30,39 @@ Yellow applies to normal timer changes, early switches, manual commands and ambu
 ADAPTIVE applies these demand rules. FIXED uses the same paired timer without early demand switching. MANUAL holds the selected pair; a confirmed flashing ambulance can still receive priority. Selecting either EAST/WEST maps to EW, and NORTH/SOUTH maps to NS. Signal output currently uses `SimulationSignalController`.
 
 ## Camera setup and the 30-foot boundary
+
+### Image demonstration (no videos required)
+
+Keep these files in `backend/images`:
+
+```text
+heavy traffic.png
+normal traffic.png
+low traffic.jpeg
+ambulance case.png
+```
+
+The dashboard selects **Image traffic demonstration** when no configured video file exists. Choose **Heavy / heavy**, **Heavy / normal**, **Normal / low**, **Heavy / low**, **Heavy / ambulance** or **Normal / normal**. The first image supplies East and West; the second supplies North and South. **Swap EW / NS** reverses them. A pair shares one reference image; these are explicitly labelled still inputs rather than four independent camera captures.
+
+YOLO runs on all four actual files, with detections cached until an image or detector confidence changes. Bounding boxes, ROI counts, class weights and pair averages come from those detections; presets do not assign fabricated counts. A sample boundary excludes distant vehicles. Its physical distance is uncalibrated, and it does not establish a 30-foot measurement. The images cannot demonstrate movement, queue clearance or changing real traffic.
+
+Case changes keep the existing signal timer, previous green/red pair and transition history. **Auto tour** selects the next case only after yellow completes and a new green phase begins. **Pause** and **1× / 2× / 5× / 10×** control this demonstration's clock; a full green phase is still 70 demonstration seconds, followed by 3 seconds of yellow. Early switching uses the existing score difference and empty-demand rules. The receiving pair retains its protected full phase.
+
+Selecting **Heavy / ambulance** starts **12 demonstration seconds of demo lights ON**, including after swapping EW/NS. Priority still requires detected ambulance identity and yellow clearance; there is no second activation click. **Lights off** tests the non-emergency case, and **Lights on (12s)** repeats the demonstration. Camera overlays show the demo input independently of the photograph's unchanged pixels. This is explicit operator input, not visual confirmation of flashing from a single photograph. When paused, press **Play** to advance confirmation and yellow clearance. Video inputs continue to require observed temporal beacon evidence.
+
+`IMAGE-DEMO` owns an isolated in-memory controller and clock. It does not modify live video sources, live signal state, the 3D lab or persisted live analytics. Its score records and signal history last for the backend session. Set `IMAGE_DEMO_ENABLED=false` to hide it, or set `IMAGE_DEMO_DIR` to another directory with the same four filenames.
+
+```text
+GET  /api/image-demo
+POST /api/image-demo/case     {"case_id":"heavy_low","swapped":false}
+POST /api/image-demo/control  {"paused":false,"speed":10,"auto_tour":true}
+POST /api/image-demo/control  {"lights_active":true}
+WS   /ws/intersections/IMAGE-DEMO
+```
+
+These controls require authentication and are available to viewers as well as operators. They cannot target live intersections.
+
+### Video inputs
 
 Copy `backend/.env.example` to `backend/.env` and supply four distinct footage paths:
 
@@ -58,13 +91,13 @@ PUT requires all four directions. An entry looks like:
 {"direction":"EAST","polygon":[[0.35,0.20],[0.65,0.20],[0.90,0.90],[0.10,0.90]],"coordinate_space":"normalized","pixels_per_meter":8,"length_m":9.144,"capacity_vehicles":25}
 ```
 
-Persisted boundaries take precedence over environment defaults on later starts. `pixels_per_meter` applies to optional speed diagnostics, not weighted scoring.
+Persisted boundaries take precedence over environment defaults on later starts. `pixels_per_meter` applies to optional speed diagnostics, not weighted scoring. ROI writes are restricted to live inputs; educational preset boundaries cannot be overwritten through this API.
 
 ## Dashboard and records
 
 The dashboard contains paired green/yellow countdowns, four feeds, ROI class counts and lane scores, EW/NS average scores, the current denser pair and ambulance flashing-light status. Charts, forecast data, the old sidebar control panel, fake notifications and inactive search controls are removed.
 
-Master View shows all four feeds. Direction tabs show one full independent camera frame. Boundary overlays, snapshot downloads and fullscreen remain available. Snapshot images are sampled from video for processing; per-frame image files are not continuously written to disk.
+Master View shows all four feeds. Direction tabs show one full input frame. Boundary overlays, snapshot downloads and fullscreen remain available for both video and image inputs. Video frames are sampled for processing; per-frame image files are not continuously written to disk.
 
 Measured lane/pair scores and the denser pair are recorded about every two seconds and on phase changes using the existing structured database event log. Live records are bounded in memory; persisted records survive restart. Educational simulation records remain in the lab's memory and never enter the live database event log or dashboard.
 
@@ -82,6 +115,8 @@ Frames retain the full camera perspective. Unavailable cameras return HTTP 503. 
 
 Open **Simulation** to explore the WebGL 3D intersection: moving cars, E/W/N/S road labels, crosswalks, paired traffic lights, buildings and trees. Drag to orbit, scroll/pinch to zoom, or select the top view. Case buttons demonstrate balanced traffic, either busy pair and both nearly-empty-green situations. Pause, restart and 1×/2×/5×/10× speeds operate the simulation clock. Ambulance controls demonstrate lights on versus off. Approaching cars stop on red/yellow; vehicles already crossing clear the junction. The scene is a schematic miniature, not a calibrated camera or road model.
 
+The city includes textured roads and paving, detailed vehicles, shopfronts, roof furniture, landscaping and soft shadows. **Daylight**, **Golden hour** and **Night** change the presentation, including illuminated windows and streetlights. Smooth camera transitions and the scene's fullscreen button support closer exploration. These visual controls preserve traffic state, scenario counts, timers and ambulance behaviour; scene assets are generated locally without external downloads.
+
 `SIMULATION-LAB` is a separate in-memory controller, detector, scenario provider and virtual clock. It uses the production tracking, ROI scoring, paired decision and yellow-transition pipeline, but it has no uploaded camera inputs and is excluded from live intersection lists and regional coordination. All authenticated users, including VIEWER users, can operate this lab; permission to change real signals remains restricted to operators.
 
 The presets are balanced traffic (8 cars in each direction), busy NS (18 cars each in N/S and 4 each in E/W), busy EW (the inverse), and two early-switch cases (2 cars each on the green pair, 18 each on the red pair, and 40 seconds of green remaining). Preset demand is replenished for a repeatable lesson rather than presented as a camera measurement. Pair scores are computed from the scripted detections with the same car weight of 2. Early-switch cases show 3 seconds of empty-demand confirmation, 3 seconds of yellow and a full 70-second receiving phase. Normal timer alternation remains active even when one pair stays busier.
@@ -97,6 +132,10 @@ WS   /ws/intersections/SIMULATION-LAB
 
 Scenario names are `balanced`, `ns_busy`, `ew_busy`, `empty_ew` and `empty_ns`. Speed values are 1, 2, 5 and 10; speed and pause only affect the lab. REST and WebSocket snapshots add `simulation` metadata with the scenario, reset identifier, target counts, paused state, speed, elapsed virtual time and visible ambulance. Ambulance demonstrations render flashing roof pixels through the existing temporal beacon detector; an ambulance with lights off does not receive priority. Simulation routes reject real intersection IDs, and video routes reject the lab ID.
 
+Both educational runtimes expose a session identifier so reconnects accept a restarted backend even when revision/reset counters return to their initial values. Paused image inputs refresh edited source files without advancing the clock. Lab ambulance controls refresh detections while paused; changing lights preserves the vehicle and queue positions.
+
+Project maintenance rules are in [AGENTS.md](AGENTS.md). [architecture.md](architecture.md) describes the current system, and [changes.md](changes.md) records changes and verification.
+
 ## Run on Windows PowerShell
 
 Install dependencies once from the repository root:
@@ -107,7 +146,7 @@ python -m venv .venv
 Copy-Item backend/.env.example backend/.env
 ```
 
-Configure the four paths and boundaries. Start the backend:
+The supplied images work without configuring videos. For video operation, configure the four paths and boundaries. Start the backend:
 
 ```powershell
 Set-Location D:\Github\Dhaara\backend
@@ -135,4 +174,4 @@ npx tsc --noEmit --incremental false
 npm run build
 ```
 
-Tests cover class weights, pair means, timing and early-switch boundaries, persistent empty demand, full receiving phases, missing cameras, paired outputs, flashing-light confirmation, source isolation, ROI exclusion, database records and API/WebSocket output. Synthetic beacon tests verify the temporal algorithm; real ambulance identification and flashing-light accuracy still require validation against camera footage.
+Tests cover class weights, pair means, timing and early-switch boundaries, persistent empty demand, full receiving phases, missing cameras, paired outputs, flashing-light confirmation, source isolation, ROI exclusion, database records and API/WebSocket output. Image tests also verify all six cases, swaps preserving the clock, cached inference and invalidation, explicit ambulance light input, pause/speed, tour boundaries and exclusion from live persistence. Synthetic beacon tests verify the temporal algorithm; real ambulance identification and flashing-light accuracy still require validation against camera footage.

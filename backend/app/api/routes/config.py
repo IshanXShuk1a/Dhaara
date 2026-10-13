@@ -66,7 +66,7 @@ def update_config(
 
     # Propagate to all live controllers
     for runtime in app_state.runtimes.values():
-        if runtime.simulation_lab is not None:
+        if runtime.simulation_lab is not None or runtime.image_demo is not None:
             continue  # live configuration cannot alter an active educational scenario
         with runtime.lock:
             c = runtime.controller

@@ -82,6 +82,8 @@ export interface Intersection {
   location: string;
   status: string;
   created_at: string;
+  input_mode?: "VIDEO" | "IMAGE_DEMO";
+  preferred?: boolean;
 }
 
 export interface SystemEvent {
@@ -118,8 +120,11 @@ export interface ScoreRecord {
 export interface IntersectionWsPayload {
   intersection_id: string;
   status?: "NO_DATA";
+  error?: string;
   frame_index?: number;
   timestamp?: number;
+  input_mode?: "IMAGE_DEMO";
+  image_demo?: ImageDemoState;
   demand?: {
     pair_scores: Record<SignalPair, number | null>;
     denser_pair: SignalPair | "BALANCED" | null;
@@ -145,6 +150,7 @@ export interface IntersectionWsPayload {
     target_direction?: string | null;
     countdown_s: number;
     mode?: string;
+    previous_phase?: SignalPair | null;
   };
   decision?: {
     selected_direction: string;
@@ -164,13 +170,15 @@ export interface IntersectionWsPayload {
     active_lane_id?: string | null;
     flashing_lights_confirmed?: boolean;
     visible_ambulances?: number;
+    light_confirmation_source?: "DEMO_INPUT";
+    demo_lights_active?: boolean;
   };
   safety?: {
     compliant_count: number;
     violation_count: number;
     compliance_rate: number | null;
   };
-  cameras?: Record<string, {status: string; error: string | null; source: string; frame_index: number | null}>;
+  cameras?: Record<string, {status: string; error: string | null; source: string; frame_index: number | null; filename?: string; image_id?: string}>;
   lanes?: Record<
     string,
     {
@@ -187,6 +195,32 @@ export interface IntersectionWsPayload {
       reasons?: string[];
     }
   >;
+}
+
+export type ImageCaseId = "balanced_heavy" | "heavy_normal" | "normal_low" | "heavy_low" | "heavy_ambulance" | "balanced_normal";
+export type ReferenceImageId = "heavy" | "normal" | "low" | "ambulance";
+export interface ImageDemoState {
+  session_id: string;
+  case_id: ImageCaseId;
+  title: string;
+  swapped: boolean;
+  sources: Record<string, ReferenceImageId>;
+  presets: Array<{id: ImageCaseId; title: string; ew: ReferenceImageId; ns: ReferenceImageId}>;
+  images: Record<ReferenceImageId, {filename: string; vehicle_count: number; vehicle_score: number; vehicle_counts: Record<string, number>; detected_total: number; model: string}>;
+  ready: boolean;
+  paused: boolean;
+  speed: 1 | 2 | 5 | 10;
+  auto_tour: boolean;
+  virtual_time_s: number;
+  revision: number;
+  lights_active: boolean;
+  lights_remaining_s: number;
+  previous_green_pair: SignalPair | null;
+  previous_red_pair: SignalPair | null;
+  roi_calibrated: false;
+  detection_source: string;
+  transitions: Array<{time_s: number; case_id: ImageCaseId; from_pair: SignalPair; from_state: "GREEN" | "YELLOW"; to_pair: SignalPair; to_state: "GREEN" | "YELLOW"; target_pair: SignalPair | null; directions: Record<string,string>; pair_scores: Record<SignalPair,number>; reason: string[]}>;
+  case_history: Array<{time_s: number; case_id: ImageCaseId; ew: ReferenceImageId; ns: ReferenceImageId; swapped: boolean}>;
 }
 
 export interface DetectedVehicleItem {

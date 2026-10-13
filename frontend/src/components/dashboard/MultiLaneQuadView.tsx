@@ -23,6 +23,7 @@ export function MultiLaneQuadView({ intersectionId, payload, wsStatus }: Props) 
   const [overlays, setOverlays] = useState<Overlays>({ show_boxes: true, show_labels: true, show_lanes: true, show_heat: false });
   const containerRef = useRef<HTMLDivElement>(null);
   const visible = view === "MASTER" ? DIRECTIONS : [view];
+  const imageDemo = intersectionId === "IMAGE-DEMO";
   useEffect(() => {
     const update = () => setFullscreen(document.fullscreenElement === containerRef.current);
     document.addEventListener("fullscreenchange", update);
@@ -32,8 +33,8 @@ export function MultiLaneQuadView({ intersectionId, payload, wsStatus }: Props) 
     <section ref={containerRef} aria-label="Directional cameras" className="card min-w-0 bg-surface-card p-3 space-y-2.5 [&:fullscreen]:overflow-y-auto [&:fullscreen]:bg-surface-canvas [&:fullscreen]:p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold text-text-primary">Directional cameras</h2>
-          <div className="text-[11px] text-text-muted">Vehicles counted only inside the marked boundary</div>
+          <h2 className="text-sm font-semibold text-text-primary">{imageDemo ? "Directional image inputs" : "Directional cameras"}</h2>
+          <div className="text-[11px] text-text-muted">{imageDemo ? "Static reference images · vehicles counted inside the sample boundary" : "Vehicles counted only inside the marked boundary"}</div>
         </div>
         <button onClick={() => {
           if (fullscreen) document.exitFullscreen?.().catch(() => {});
@@ -75,6 +76,7 @@ function CameraPanel({ direction, compact, intersectionId, payload, wsStatus, ov
   const { role } = useAuth();
   const [editing, setEditing] = useState(false);
   const synthetic = Boolean(payload?.is_simulated);
+  const imageDemo = intersectionId === "IMAGE-DEMO";
   const metrics = !synthetic && payload?.cameras?.[direction]?.status === "ONLINE" ? payload?.lanes?.[direction] : undefined;
   const signal = !synthetic ? payload?.signal?.directions?.[direction] : undefined;
   const camera = !synthetic ? payload?.cameras?.[direction] : undefined;
@@ -112,7 +114,7 @@ function CameraPanel({ direction, compact, intersectionId, payload, wsStatus, ov
     }
     poll();
     return () => { cancelled = true; clearTimeout(timer); controller.abort(); if (currentUrl) URL.revokeObjectURL(currentUrl); };
-  }, [intersectionId, direction, overlays, synthetic]);
+  }, [intersectionId, direction, overlays, synthetic, camera?.image_id]);
 
   function snapshot() {
     if (!frameOk || !imgRef.current?.src) return;
@@ -136,10 +138,12 @@ function CameraPanel({ direction, compact, intersectionId, payload, wsStatus, ov
       <div style={imageStyle} className={clsx("relative bg-[#071018] overflow-hidden flex items-center justify-center", compact ? "aspect-video md:aspect-auto md:h-[var(--camera-image-height)]" : "h-[var(--camera-image-height)]")}>
         {/* Keep mounted while loading so the first frame can be assigned. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img ref={imgRef} alt={`${direction} independent camera`} className={clsx("w-full h-full object-contain", !frameOk && "hidden")} />
+        <img ref={imgRef} alt={`${direction} ${imageDemo ? "source image" : "independent camera"}`} className={clsx("w-full h-full object-contain", !frameOk && "hidden")} />
+        {imageDemo && frameOk && <span className="absolute bottom-1.5 left-2 rounded bg-black/75 px-2 py-1 text-[9px] text-slate-200">{camera?.filename ?? "Source image"} · STILL</span>}
+        {imageDemo && camera?.image_id === "ambulance" && frameOk && <span className="absolute top-2 left-2 rounded bg-black/80 px-2 py-1 text-[10px] font-semibold text-sky-200">Demo lights {payload?.image_demo?.lights_active ? "ON" : "OFF"}</span>}
         {!frameOk && <div className="flex flex-col items-center gap-2 px-4 text-center text-[11px] text-slate-400">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true"><rect x="2" y="6" width="14" height="12" rx="2" /><path d="m16 10 6-3v10l-6-3" /></svg>
-          {synthetic ? "Real camera input required" : wsStatus === "DISCONNECTED" ? "Backend unreachable" : camera?.status === "OFFLINE" ? `${direction} camera offline` : `Loading ${direction.toLowerCase()} camera...`}
+          {synthetic ? "Real camera input required" : wsStatus === "DISCONNECTED" ? "Backend unreachable" : camera?.status === "OFFLINE" ? `${direction} input offline` : `Loading ${direction.toLowerCase()} ${imageDemo ? "image" : "camera"}...`}
         </div>}
       </div>
       <div className="space-y-1 px-3 py-1.5">
@@ -149,13 +153,13 @@ function CameraPanel({ direction, compact, intersectionId, payload, wsStatus, ov
         </div>
         <div className="flex items-center justify-between gap-2 text-[10px] text-text-muted">
           <span className="truncate" title={payload?.demand?.rickshaw_supported === false ? "The loaded detector does not classify auto-rickshaws separately." : undefined}>
-            Cars {metrics?.vehicle_counts?.car ?? (metrics ? 0 : "—")} <span aria-hidden="true">·</span> Autos {payload?.demand?.rickshaw_supported === false ? "—" : metrics?.vehicle_counts?.rickshaw ?? (metrics ? 0 : "—")} <span aria-hidden="true">·</span> Bikes {metrics ? (metrics.vehicle_counts?.motorcycle ?? 0) + (metrics.vehicle_counts?.bicycle ?? 0) : "—"}
+            {imageDemo ? metrics ? Object.entries(metrics.vehicle_counts).filter(([,count]) => count > 0).map(([type,count]) => `${type.charAt(0).toUpperCase()+type.slice(1)} ${count}`).join(" · ") || "No vehicles detected" : "Awaiting detection" : <>Cars {metrics?.vehicle_counts?.car ?? (metrics ? 0 : "—")} <span aria-hidden="true">·</span> Autos {payload?.demand?.rickshaw_supported === false ? "—" : metrics?.vehicle_counts?.rickshaw ?? (metrics ? 0 : "—")} <span aria-hidden="true">·</span> Bikes {metrics ? (metrics.vehicle_counts?.motorcycle ?? 0) + (metrics.vehicle_counts?.bicycle ?? 0) : "—"}</>}
           </span>
           <div className="flex flex-shrink-0 items-center gap-2">
             <button onClick={snapshot} disabled={!frameOk} className="btn-tactile rounded-sm text-text-secondary hover:text-accent disabled:opacity-40" title={`Save ${direction.toLowerCase()} camera snapshot`} aria-label={`Save ${direction.toLowerCase()} camera snapshot`}>
               <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true"><path d="M8 1v9m-3-3 3 3 3-3M2 11v3h12v-3" /></svg>
             </button>
-            {role === "ADMIN" && <button onClick={() => setEditing(true)} disabled={!frameOk} className="btn-tactile rounded-sm text-accent disabled:opacity-40" aria-label={`Set ${direction.toLowerCase()} 30 ft boundary`} title="Set 30 ft measurement boundary">
+            {role === "ADMIN" && !imageDemo && <button onClick={() => setEditing(true)} disabled={!frameOk} className="btn-tactile rounded-sm text-accent disabled:opacity-40" aria-label={`Set ${direction.toLowerCase()} 30 ft boundary`} title="Set 30 ft measurement boundary">
               <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true"><path d="M1.5 5.5h13v5h-13zM4 5.5v2.5m3-2.5v4m3-4v2.5" /></svg>
             </button>}
           </div>

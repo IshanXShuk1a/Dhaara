@@ -32,11 +32,12 @@ class IntersectionRuntime:
     # The educational lab owns a separate virtual clock and never shares inputs
     # or controller state with a live intersection.
     simulation_lab: object | None = None
+    image_demo: object | None = None
     lock: object = field(default_factory=RLock)
 
     def restart_video_inputs(self):
         with self.lock:
-            if self.simulation_lab is not None or self.is_simulated:
+            if self.simulation_lab is not None or self.image_demo is not None or self.is_simulated:
                 raise ValueError("The educational simulation cannot restart live video inputs")
             self.camera_status = "ONLINE"
             self.controller._detector = self.real_detector
@@ -55,7 +56,7 @@ class AppState:
 
     def register(self, intersection_id, runtime):
         self.runtimes[intersection_id] = runtime
-        if runtime.simulation_lab is None:
+        if runtime.simulation_lab is None and runtime.image_demo is None:
             self.coordinator.register(runtime.controller)
 
     def get(self, intersection_id):

@@ -94,6 +94,8 @@ class Settings(BaseSettings):
     west_video: str = "./videos/west.mp4"
     north_video: str = "./videos/north.mp4"
     south_video: str = "./videos/south.mp4"
+    image_demo_enabled: bool = True
+    image_demo_dir: str = "./images"
     east_roi: list[list[float]] = Field(default_factory=lambda: [[.35, .2], [.65, .2], [.9, .9], [.1, .9]])
     west_roi: list[list[float]] = Field(default_factory=lambda: [[.35, .2], [.65, .2], [.9, .9], [.1, .9]])
     north_roi: list[list[float]] = Field(default_factory=lambda: [[.35, .2], [.65, .2], [.9, .9], [.1, .9]])

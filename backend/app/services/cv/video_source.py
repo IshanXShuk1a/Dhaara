@@ -25,6 +25,7 @@ class SourceKind(str, Enum):
     WEBCAM = "WEBCAM"
     RTSP = "RTSP"
     SIMULATION = "SIMULATION"
+    STILL_IMAGE = "STILL_IMAGE"
 
 
 class VideoSourceError(Exception):
@@ -123,6 +124,35 @@ class UploadedVideoSource(BaseVideoSource):
             if self._cap is not None:
                 self._cap.release()
                 self._cap = None
+
+
+class StillImageSource(BaseVideoSource):
+    """Repeated observations of one supplied image, explicitly labelled as static."""
+
+    def __init__(self, file_path: str):
+        self._path = Path(file_path)
+        self._image = None
+        self._frame_index = 0
+
+    def open(self):
+        import cv2
+        if self._image is None:
+            self._image = cv2.imread(str(self._path))
+            if self._image is None:
+                raise VideoSourceError(f"Cannot decode source image: {self._path.name}")
+
+    def read(self):
+        self.open()
+        self._frame_index += 1
+        h, w = self._image.shape[:2]
+        return VideoFrame(self._image, self._frame_index, time.time(), SourceKind.STILL_IMAGE,
+                          self._path.name, 5.0, w, h)
+
+    def is_open(self):
+        return self._image is not None
+
+    def close(self):
+        self._image = None
 
 
 class WebcamSource(BaseVideoSource):

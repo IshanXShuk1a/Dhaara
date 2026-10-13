@@ -31,7 +31,7 @@ def upload_video(
     user: User = Depends(require_role("TRAFFIC_OPERATOR")),
     db: Session = Depends(get_db),
 ):
-    runtime = _runtime_or_404(intersection_id)
+    runtime = _runtime_or_404(intersection_id, for_control=True)
     direction = _direction(direction)
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -79,12 +79,14 @@ def upload_video(
     return {"intersection_id": intersection_id, "direction": direction, "path": str(dest.resolve())}
 
 
-def _runtime_or_404(intersection_id):
+def _runtime_or_404(intersection_id, for_control=False):
     runtime = app_state.get(intersection_id)
     if runtime is None:
         raise HTTPException(404, "Intersection not configured")
     if runtime.simulation_lab is not None:
         raise HTTPException(409, "The simulation lab does not accept live video controls")
+    if for_control and runtime.image_demo is not None:
+        raise HTTPException(409, "Image inputs use the image case controls; they cannot upload or start live videos")
     return runtime
 
 
@@ -97,14 +99,14 @@ def _direction(direction):
 
 @router.post("/start")
 def start_video(intersection_id: str, _user: User = Depends(require_role("TRAFFIC_OPERATOR"))):
-    runtime = _runtime_or_404(intersection_id)
+    runtime = _runtime_or_404(intersection_id, for_control=True)
     runtime.restart_video_inputs()
     return {"intersection_id": intersection_id, "status": "ONLINE"}
 
 
 @router.post("/stop")
 def stop_video(intersection_id: str, _user: User = Depends(require_role("TRAFFIC_OPERATOR"))):
-    runtime = _runtime_or_404(intersection_id)
+    runtime = _runtime_or_404(intersection_id, for_control=True)
     with runtime.lock:
         runtime.camera_status = "OFFLINE"
         runtime.processed_frames = {}

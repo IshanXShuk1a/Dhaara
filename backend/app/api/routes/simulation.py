@@ -103,6 +103,8 @@ def spawn_ambulance(payload: SimulationAmbulanceRequest,
     runtime = _runtime_or_404(intersection_id)
     with runtime.lock:
         script_id = runtime.simulation_lab.spawn_ambulance(runtime, payload.direction, payload.lights_active)
+        # Refresh detections even while paused, without advancing its clock.
+        runtime.simulation_lab._process_step(runtime, 0.0)
         return {**_payload(runtime), "script_id": script_id, "direction": payload.direction,
                 "lights_active": payload.lights_active}
 

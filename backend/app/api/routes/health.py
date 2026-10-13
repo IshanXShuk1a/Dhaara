@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api", tags=["health"])
 @router.get("/health")
 def health():
     live = {iid: runtime for iid, runtime in app_state.runtimes.items()
-            if runtime.simulation_lab is None}
+            if runtime.simulation_lab is None and runtime.image_demo is None}
     return {
         "status": "ok",
         "app": "DHAARA",
@@ -19,4 +19,5 @@ def health():
         ],
         "intersection_count": len(live),
         "simulation_available": any(runtime.simulation_lab is not None for runtime in app_state.runtimes.values()),
+        "image_demo_available": any(runtime.image_demo is not None for runtime in app_state.runtimes.values()),
     }

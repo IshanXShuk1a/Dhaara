@@ -17,6 +17,10 @@ def get_current_traffic(intersection_id: str, _user: User = Depends(get_current_
     runtime = app_state.get(intersection_id)
     if runtime is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intersection not running")
+    if runtime.image_demo is not None:
+        from app.api.websocket import runtime_to_payload
+        with runtime.lock:
+            return runtime_to_payload(intersection_id, runtime)
     last = getattr(runtime.controller, "last_snapshot", None)
     if last is None:
         return {"intersection_id": intersection_id, "lanes": {}, "note": "No frames processed yet"}
@@ -58,6 +62,10 @@ def get_traffic_history(intersection_id: str, db: Session = Depends(get_db), _us
 
 @router.get("/{intersection_id}/traffic/scores/history")
 def get_score_history(intersection_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+    runtime = app_state.get(intersection_id)
+    if runtime is not None and runtime.image_demo is not None:
+        with runtime.lock:
+            return {"intersection_id": intersection_id, "records": list(runtime.controller._score_records)}
     from app.models.events import SystemEventRecord
     rows = (db.query(SystemEventRecord).filter(SystemEventRecord.intersection_id == intersection_id,
              SystemEventRecord.event_type == "DECISION_MADE").order_by(SystemEventRecord.timestamp.desc()).limit(100).all())

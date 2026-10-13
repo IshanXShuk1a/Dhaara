@@ -37,7 +37,10 @@ export function IntersectionProvider({ children }: { children: ReactNode }) {
         setIntersections(list);
         setError(null);
         const stored = typeof window !== "undefined" ? window.localStorage.getItem("dhaara_selected_intersection") : null;
-        if (stored && list.some((i) => i.id === stored)) {
+        const preferred = list.find(i => i.preferred);
+        if (preferred) {
+          setSelectedIdState(preferred.id);
+        } else if (stored && list.some((i) => i.id === stored)) {
           setSelectedIdState(stored);
         } else if (list.length > 0) {
           setSelectedIdState(list[0].id);

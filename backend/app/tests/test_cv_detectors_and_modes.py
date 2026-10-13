@@ -27,7 +27,7 @@ class TestAmbulanceDetector(unittest.TestCase):
         self.assertFalse(is_amb)
         self.assertLess(conf, 0.4)
 
-    def test_white_vehicle_with_red_cross_is_detected(self):
+    def test_white_vehicle_with_red_cross_and_colored_beacon_is_detected(self):
         # Create an image that looks like an ambulance:
         # white background with red cross in center and bright roof lights
         image = np.full((120, 100, 3), (245, 245, 245), dtype=np.uint8)
@@ -35,10 +35,16 @@ class TestAmbulanceDetector(unittest.TestCase):
         image[50:70, 35:65] = (20, 20, 220)
         image[40:80, 45:55] = (20, 20, 220)
         # Top roof beacon
-        image[5:15, 40:60] = (255, 255, 255)
+        image[5:15, 40:60] = (20, 20, 255)
         is_amb, conf = self.detector.is_ambulance(image, (0, 0, 100, 120), "truck")
         self.assertTrue(is_amb)
         self.assertGreater(conf, 0.5)
+
+    def test_white_vehicle_with_blue_windows_and_reflection_is_not_ambulance(self):
+        image = np.full((120, 100, 3), (245, 245, 245), dtype=np.uint8)
+        image[30:70, 15:85] = (150, 65, 30)
+        image[5:15, 40:60] = (255, 255, 255)
+        self.assertFalse(self.detector.is_ambulance(image, (0, 0, 100, 120), "car")[0])
 
 
 class TestHelmetDetector(unittest.TestCase):

@@ -85,3 +85,39 @@ def test_simulated_ambulance_requires_actual_flashing_pixel_evidence(monkeypatch
         assert snapshot.signal_state == "YELLOW" and snapshot.decision.action == "YELLOW"
     else:
         assert snapshot.signal_state == "GREEN" and snapshot.signal_active_direction == "EW"
+
+
+def test_lab_session_identity_survives_resets_but_changes_on_restart():
+    runtime = create_simulation_runtime(DEFAULT_CONFIG)
+    lab = runtime.simulation_lab
+    identity = lab.metadata()["session_id"]
+    lab.reset(runtime, "ns_busy")
+    assert lab.metadata()["session_id"] == identity
+    assert create_simulation_runtime(DEFAULT_CONFIG).simulation_lab.metadata()["session_id"] != identity
+
+
+def test_ambulance_lights_toggle_preserves_vehicle_and_clears_pending_priority(monkeypatch):
+    import app.services.simulation.lab as lab_module
+    import app.services.controllers.intersection_controller as controller_module
+    clock = [100.0]
+    monkeypatch.setattr(lab_module.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(controller_module.time, "time", lambda: clock[0])
+    runtime = create_simulation_runtime(DEFAULT_CONFIG)
+    lab = runtime.simulation_lab
+    original = lab.spawn_ambulance(runtime, "NORTH", True)
+    for _ in range(12):
+        clock[0] += .2
+        lab.step(runtime, .2)
+    assert runtime.controller.last_snapshot.signal_state == "YELLOW"
+    lab.paused = True
+    now = lab.simulated_time_s
+    assert lab.spawn_ambulance(runtime, "NORTH", False) == original
+    lab._process_step(runtime, 0)
+    snapshot = runtime.controller.last_snapshot
+    assert lab.simulated_time_s == now
+    assert not any(snapshot.ambulance_lights.values())
+    assert snapshot.signal_target_direction == "EW"  # cancel emergency, keep yellow clearance
+    lab.paused = False
+    clock[0] += 3
+    lab.step(runtime, 3)
+    assert runtime.controller.last_snapshot.signal_active_direction == "EW"

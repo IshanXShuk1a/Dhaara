@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import asdict, replace
 import math
 import time
+from uuid import uuid4
 
 import cv2
 import numpy as np
@@ -31,6 +32,7 @@ SCENARIOS = {
 class SimulationLab:
     def __init__(self, config: DomainConfig):
         self.config = config
+        self.session_id = uuid4().hex
         self.scenario = "balanced"
         self.run_id = 0
         self.label = "Balanced traffic"
@@ -43,7 +45,7 @@ class SimulationLab:
     def metadata(self) -> dict:
         ambulance = next(({"direction": direction, "lights_active": lights}
                           for direction, lights, _ in self.ambulances.values()), None)
-        return {"scenario": self.scenario, "run_id": self.run_id, "label": self.label, "targets": asdict(self.targets),
+        return {"session_id": self.session_id, "scenario": self.scenario, "run_id": self.run_id, "label": self.label, "targets": asdict(self.targets),
                 "paused": self.paused, "speed": self.speed,
                 "simulated_time_s": round(self.simulated_time_s, 2), "ambulance": ambulance}
 
@@ -78,6 +80,14 @@ class SimulationLab:
             targets, runtime.frame_index, horizon_frames=2**31, hold_queues=True)
 
     def spawn_ambulance(self, runtime: IntersectionRuntime, direction: str, lights_active: bool = True) -> int:
+        if not lights_active:
+            # Explicit OFF is certain. Do not retain the temporal detector's
+            # short dark-flash tolerance after an operator turns the lights off.
+            runtime.controller._emergency_lights.retain(set())
+        for script_id, (existing_direction, _, _) in self.ambulances.items():
+            if existing_direction == direction:
+                self.ambulances[script_id] = (direction, lights_active, self.simulated_time_s + 30)
+                return script_id
         for previous_id in self.ambulances:
             runtime.scenario_provider.remove_vehicle(previous_id)
         self.ambulances.clear()

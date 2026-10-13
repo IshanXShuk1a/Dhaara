@@ -62,6 +62,8 @@ def set_signal_mode(
     user: User = Depends(require_role("TRAFFIC_OPERATOR")),
 ):
     runtime = _runtime_or_404(intersection_id)
+    if runtime.image_demo is not None:
+        raise HTTPException(409, "Use image demonstration controls; live signal operations are separate")
     try:
         mode = SignalMode(payload.mode)
     except ValueError:
@@ -87,6 +89,8 @@ def manual_override(
 ):
     """Operator override through the same exclusive signal state owner."""
     runtime = _runtime_or_404(intersection_id)
+    if runtime.image_demo is not None:
+        raise HTTPException(409, "Use image demonstration controls; live signal operations are separate")
     fsm = runtime.controller.signal_fsm
     with runtime.lock:
         if payload.direction not in fsm.directions + ["EW", "NS"]:

@@ -30,6 +30,10 @@ def configure_lanes(
     if len(payload) != 4 or {cfg.direction for cfg in payload} != set(DIRECTIONS):
         raise HTTPException(400, "Configure exactly one ROI for each of EAST, WEST, NORTH and SOUTH")
 
+    runtime = app_state.get(intersection_id)
+    if runtime is not None and (runtime.image_demo is not None or runtime.simulation_lab is not None):
+        raise HTTPException(409, "ROI configuration is restricted to live camera intersections")
+
     db.query(Lane).filter(Lane.intersection_id == intersection_id).delete()
     created = []
     for lane_cfg in payload:
@@ -48,9 +52,7 @@ def configure_lanes(
     for lane in created:
         db.refresh(lane)
 
-    from app.core.state import app_state
     from app.services.lanes.lane_intelligence import LaneGeometry
-    runtime = app_state.get(intersection_id)
     if runtime is not None:
         with runtime.lock:
             for cfg in payload:

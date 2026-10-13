@@ -71,6 +71,8 @@ class IntersectionOut(BaseModel):
     location: str
     status: str
     created_at: datetime
+    input_mode: str = "VIDEO"
+    preferred: bool = False
 
     class Config:
         from_attributes = True

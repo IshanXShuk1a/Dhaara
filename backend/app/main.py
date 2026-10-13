@@ -23,11 +23,12 @@ from app.services.lanes.lane_intelligence import LaneGeometry
 from app.services.cv.lane_assigner import DIRECTIONS, camera_lane, validate_normalized_roi
 from app.services.cv.video_source import UploadedVideoSource
 from app.services.simulation.lab import SIMULATION_INTERSECTION_ID, create_simulation_runtime
+from app.services.image_demo import IMAGE_DEMO_ID, IMAGE_FILES, create_image_demo_runtime
 from app.services.analytics.analytics_service import AnalyticsService
 from app.services.event_bus import event_bus, Event, EventType
 
 from app.api.routes import (
-    health, auth, intersections, lanes, traffic, signals, video, emergency, safety, analytics, simulation, events, config, classifier,
+    health, auth, intersections, lanes, traffic, signals, video, emergency, safety, analytics, simulation, image_demo, events, config, classifier,
 )
 from app.api.websocket import router as websocket_router, connection_manager
 
@@ -46,7 +47,7 @@ app.add_middleware(
 
 for router in (health.router, auth.router, intersections.router, lanes.router, traffic.router,
                signals.router, video.router, emergency.router, safety.router, analytics.router,
-               simulation.router, events.router, config.router, classifier.router, websocket_router):
+               simulation.router, image_demo.router, events.router, config.router, classifier.router, websocket_router):
     app.include_router(router)
 
 DEFAULT_INTERSECTION_ID = "OD-BBSR-001"
@@ -65,7 +66,7 @@ def _subscribe_event_persistence():
     from app.models.events import SystemEventRecord
 
     def _persist(event: Event) -> None:
-        if event.intersection_id == SIMULATION_INTERSECTION_ID:
+        if event.intersection_id in (SIMULATION_INTERSECTION_ID, IMAGE_DEMO_ID):
             return  # educational observations never enter the live event log
         try:
             with session_scope() as db:
@@ -203,6 +204,8 @@ def _process_runtime(runtime, dt_seconds):
     with runtime.lock:
         if runtime.simulation_lab is not None:
             return runtime.simulation_lab.step(runtime, dt_seconds)
+        if runtime.image_demo is not None:
+            return runtime.image_demo.step(runtime, dt_seconds)
         images, statuses = {}, {}
         for d, camera in runtime.cameras.items():
             frame = camera.frame
@@ -229,7 +232,7 @@ async def _intersection_loop(intersection_id, runtime):
             snapshot = await asyncio.to_thread(_process_runtime, runtime, max(.001, now - previous))
             previous = now
             tick_count += 1
-            if tick_count % 10 == 0 and runtime.simulation_lab is None:
+            if tick_count % 10 == 0 and runtime.simulation_lab is None and runtime.image_demo is None:
                 def persist():
                     with session_scope() as db:
                         service = AnalyticsService(db)
@@ -237,25 +240,26 @@ async def _intersection_loop(intersection_id, runtime):
                         if snapshot.decision:
                             service.record_decision(intersection_id, snapshot.decision)
                 await asyncio.to_thread(persist)
-            from app.api.websocket import snapshot_to_payload
+            from app.api.websocket import runtime_to_payload
             with runtime.lock:
-                payload = snapshot_to_payload(intersection_id, runtime.controller)
-                if runtime.simulation_lab is not None:
-                    payload["simulation"] = runtime.simulation_lab.metadata()
+                payload = runtime_to_payload(intersection_id, runtime)
             await connection_manager.broadcast(intersection_id, payload)
         except Exception as exc:
             logger.error(f"[{intersection_id}] processing failed: {exc}")
             with runtime.lock:
                 runtime.processed_frames = {}
                 runtime.controller.last_snapshot = None
-            await connection_manager.broadcast(intersection_id, {"intersection_id": intersection_id, "status": "NO_DATA", "error": str(exc)})
+            from app.api.websocket import runtime_to_payload
+            payload = runtime_to_payload(intersection_id, runtime)
+            payload["error"] = str(exc)
+            await connection_manager.broadcast(intersection_id, payload)
         await asyncio.sleep(.2)
 
 
 async def _control_loop():
     workers = []
     for intersection_id, runtime in app_state.runtimes.items():
-        if runtime.simulation_lab is None:
+        if runtime.simulation_lab is None and runtime.image_demo is None:
             workers.extend(asyncio.create_task(_capture_camera(runtime, d)) for d in DIRECTIONS)
         workers.append(asyncio.create_task(_intersection_loop(intersection_id, runtime)))
     try:
@@ -275,6 +279,10 @@ async def lifespan(app: FastAPI):
     _seed_admin_user()
     _register_default_intersection()
     _register_simulation_lab()
+    image_directory = Path(settings.image_demo_dir)
+    image_directory = image_directory if image_directory.is_absolute() else BACKEND_DIR / image_directory
+    if settings.image_demo_enabled and all((image_directory / name).is_file() for name in IMAGE_FILES.values()):
+        app_state.register(IMAGE_DEMO_ID, create_image_demo_runtime(image_directory.resolve(), shared_detector))
     event_bus.publish(Event(type=EventType.SYSTEM_STARTUP, intersection_id=None, message="DHAARA backend started"))
     _control_loop_task = asyncio.create_task(_control_loop())
     logger.info("DHAARA backend startup complete")
